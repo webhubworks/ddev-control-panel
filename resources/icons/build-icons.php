@@ -1,43 +1,59 @@
 <?php
 
 /**
- * Regenerates the app icon and the menu bar tray icon from ddev-mark.svg.
+ * Regenerates the app icon and the menu bar tray icons.
  *
  *   php resources/icons/build-icons.php
  *
- * Output goes to public/, which is what NativePHP actually reads: the
+ * Output goes to public/, which is the only durable location: NativePHP's
  * InstallsAppIcon trait copies public/icon.png and public/IconTemplate*.png into
- * both the Electron project and vendor/nativephp/desktop/resources/build on
- * every native:run and native:build. Writing straight into either of those
- * directories does not survive, because the copy overwrites it.
+ * the Electron project and into vendor/nativephp/desktop/resources/build on
+ * every native:run and native:build. Every one of those copies is @-suppressed,
+ * so a file that is missing or misnamed fails silently and the app ships the
+ * NativePHP logo with nothing in the build output to say so.
  *
- * No SVG rasteriser is assumed to be installed. macOS QuickLook is used to
- * render the SVG, which flattens it onto an opaque white background, so the
- * artwork's coverage is recovered from the red channel: the mark is #02a8e2
- * (red = 2) against white (red = 255), which makes red an accurate anti-aliased
- * alpha mask. Everything else is composited with GD.
+ * Two separate sources, because the two icons have incompatible requirements:
+ *
+ *  - app-icon.png is the finished artwork, used as-is apart from being inset
+ *    onto the macOS icon grid.
+ *  - tray-glyph.svg is a simplified line drawing. A menu bar template image is
+ *    read through its alpha channel only and tinted by the system, so it has to
+ *    be black over transparency with no background plate. Downscaling the app
+ *    icon into it would produce a solid blob.
  */
-const SOURCE_SVG = __DIR__.'/ddev-mark.svg';
 
-/**
- * The tray glyph is a separate, simplified drawing rather than the full mark:
- * at 16pt the mark's concentric traces are sub-pixel and turn to mush.
- */
+/** The supplied 1024x1024 artwork: a dark plate with the ddev mark. */
+const APP_ICON_SOURCE = __DIR__.'/app-icon.png';
+
 const TRAY_SVG = __DIR__.'/tray-glyph.svg';
 
-const RENDER_SIZE = 2048;
 const ICON_SIZE = 1024;
 
-/** macOS icon grid: the artwork occupies 824x824 of a 1024 canvas. */
-const PLATE_INSET = 100;
-const PLATE_RADIUS = 186;
+/**
+ * macOS draws app icons inset in their canvas: the plate occupies 824 of 1024,
+ * leaving a transparent margin. The supplied artwork is full bleed, which is the
+ * iOS convention, so it is scaled down into that box. Set this to ICON_SIZE for
+ * an edge-to-edge icon instead.
+ */
+const PLATE_SIZE = 824;
 
-/** How much of the icon width the mark spans, leaving margin inside the plate. */
-const MARK_WIDTH_RATIO = 0.60;
+/**
+ * Upstream tray sizes. NativePHP's own IconTemplate.png is 22x22 and its @2x is
+ * 44x44; anything else is scaled by the system and looks soft.
+ *
+ * @var array<int, string>
+ */
+const TRAY_SIZES = [
+    22 => 'IconTemplate.png',
+    44 => 'IconTemplate@2x.png',
+];
 
-/** ddev brand cyan, lightened at the top and deepened at the bottom. */
-const GRADIENT_TOP = [0x2E, 0xBC, 0xEE];
-const GRADIENT_BOTTOM = [0x01, 0x76, 0xAB];
+/**
+ * Fraction of the template the glyph fills. NativePHP's own 22x22 template uses
+ * an 18x18 glyph with a 2px margin all round, and matching that keeps the item
+ * from crowding its neighbours in the menu bar.
+ */
+const TRAY_CONTENT_RATIO = 18 / 22;
 
 function fail(string $message): never
 {
@@ -45,9 +61,55 @@ function fail(string $message): never
     exit(1);
 }
 
+function blankCanvas(int $width, int $height): GdImage
+{
+    $image = imagecreatetruecolor($width, $height);
+    imagealphablending($image, false);
+    imagesavealpha($image, true);
+    imagefilledrectangle($image, 0, 0, $width, $height, imagecolorallocatealpha($image, 0, 0, 0, 127));
+
+    return $image;
+}
+
 /**
- * Rasterise the SVG at $size via QuickLook. The result is opaque, with the
- * artwork anti-aliased against white.
+ * The supplied artwork, scaled onto the macOS icon grid.
+ */
+function buildAppIcon(): GdImage
+{
+    if (! is_file(APP_ICON_SOURCE)) {
+        fail('missing '.APP_ICON_SOURCE);
+    }
+
+    $source = imagecreatefrompng(APP_ICON_SOURCE);
+
+    if ($source === false) {
+        fail('could not read '.APP_ICON_SOURCE);
+    }
+
+    $icon = blankCanvas(ICON_SIZE, ICON_SIZE);
+    $offset = (int) round((ICON_SIZE - PLATE_SIZE) / 2);
+
+    imagecopyresampled(
+        $icon,
+        $source,
+        $offset,
+        $offset,
+        0,
+        0,
+        PLATE_SIZE,
+        PLATE_SIZE,
+        imagesx($source),
+        imagesy($source),
+    );
+
+    return $icon;
+}
+
+/**
+ * Rasterise an SVG at $size via QuickLook, which flattens it onto opaque white.
+ *
+ * No SVG rasteriser (rsvg-convert, ImageMagick, sharp) is assumed to be
+ * installed, and regenerating an icon must not require one.
  */
 function renderSvg(string $source, int $size): GdImage
 {
@@ -64,7 +126,7 @@ function renderSvg(string $source, int $size): GdImage
     $svg = preg_replace('/\bwidth="\d+(\.\d+)?"/', 'width="'.$size.'"', $svg, 1);
     $svg = preg_replace('/\bheight="\d+(\.\d+)?"/', 'height="'.$size.'"', $svg, 1);
 
-    $svgPath = $work.'/mark.svg';
+    $svgPath = $work.'/glyph.svg';
     file_put_contents($svgPath, $svg);
 
     $pngPath = $svgPath.'.png';
@@ -73,7 +135,7 @@ function renderSvg(string $source, int $size): GdImage
     exec(sprintf('qlmanage -t -s %d -o %s %s 2>/dev/null', $size, escapeshellarg($work), escapeshellarg($svgPath)));
 
     if (! is_file($pngPath)) {
-        fail('qlmanage did not render the SVG');
+        fail('qlmanage did not render '.basename($source));
     }
 
     $image = imagecreatefrompng($pngPath);
@@ -87,7 +149,7 @@ function renderSvg(string $source, int $size): GdImage
 
 /**
  * Tight bounding box of the artwork, found by looking for anything that is not
- * the white backdrop.
+ * the white backdrop QuickLook rendered onto.
  *
  * @return array{int, int, int, int} x, y, width, height
  */
@@ -120,176 +182,49 @@ function contentBounds(GdImage $image): array
 }
 
 /**
- * Turn the white-backed render into a white silhouette with a real alpha
- * channel, cropped to the artwork.
+ * Turn the white-backed render into black over transparency, cropped to the
+ * artwork. The glyph is drawn in pure black, so the red channel is an exact
+ * anti-aliased coverage mask.
+ *
+ * @param  array{int, int, int, int}  $bounds
  */
-function silhouette(GdImage $render, array $bounds): GdImage
+function blackSilhouette(GdImage $render, array $bounds): GdImage
 {
     [$x, $y, $width, $height] = $bounds;
 
-    $out = imagecreatetruecolor($width, $height);
-    imagealphablending($out, false);
-    imagesavealpha($out, true);
+    $out = blankCanvas($width, $height);
 
     for ($row = 0; $row < $height; $row++) {
         for ($column = 0; $column < $width; $column++) {
             $red = (imagecolorat($render, $x + $column, $y + $row) >> 16) & 0xFF;
+            $alpha = (int) round($red / 255 * 127);
 
-            // Coverage of a pixel that is a blend of white (255) and the mark (2).
-            $coverage = max(0.0, min(1.0, (255 - $red) / 253));
-            $alpha = (int) round((1 - $coverage) * 127);
-
-            imagesetpixel($out, $column, $row, imagecolorallocatealpha($out, 255, 255, 255, $alpha));
+            imagesetpixel($out, $column, $row, imagecolorallocatealpha($out, 0, 0, 0, $alpha));
         }
     }
 
     return $out;
 }
 
-function blankCanvas(int $size): GdImage
-{
-    $image = imagecreatetruecolor($size, $size);
-    imagealphablending($image, false);
-    imagesavealpha($image, true);
-    imagefilledrectangle($image, 0, 0, $size, $size, imagecolorallocatealpha($image, 0, 0, 0, 127));
-
-    return $image;
-}
-
-function roundedRectangle(GdImage $image, int $x, int $y, int $width, int $height, int $radius, int $color): void
-{
-    $diameter = $radius * 2;
-
-    imagefilledrectangle($image, $x + $radius, $y, $x + $width - $radius, $y + $height, $color);
-    imagefilledrectangle($image, $x, $y + $radius, $x + $width, $y + $height - $radius, $color);
-
-    $corners = [
-        [$x + $radius, $y + $radius],
-        [$x + $width - $radius, $y + $radius],
-        [$x + $radius, $y + $height - $radius],
-        [$x + $width - $radius, $y + $height - $radius],
-    ];
-
-    foreach ($corners as [$cx, $cy]) {
-        imagefilledellipse($image, $cx, $cy, $diameter, $diameter, $color);
-    }
-}
-
 /**
- * Anti-aliased coverage mask for the rounded plate: drawn at 2x with GD's
- * aliased primitives, then resampled down.
+ * Fit the glyph into a square template image, preserving its aspect ratio and
+ * leaving the same margin upstream does.
  */
-function plateMask(int $size): GdImage
+function buildTrayIcon(GdImage $glyph, int $size): GdImage
 {
-    $scale = 2;
-    $big = imagecreatetruecolor($size * $scale, $size * $scale);
-    imagealphablending($big, true);
-    imagefilledrectangle($big, 0, 0, $size * $scale, $size * $scale, imagecolorallocate($big, 0, 0, 0));
+    $sourceWidth = imagesx($glyph);
+    $sourceHeight = imagesy($glyph);
 
-    roundedRectangle(
-        $big,
-        PLATE_INSET * $scale,
-        PLATE_INSET * $scale,
-        ($size - 2 * PLATE_INSET) * $scale,
-        ($size - 2 * PLATE_INSET) * $scale,
-        PLATE_RADIUS * $scale,
-        imagecolorallocate($big, 255, 255, 255),
-    );
-
-    $mask = imagecreatetruecolor($size, $size);
-    imagecopyresampled($mask, $big, 0, 0, 0, 0, $size, $size, $size * $scale, $size * $scale);
-
-    return $mask;
-}
-
-function buildAppIcon(GdImage $markSilhouette): GdImage
-{
-    $markWidth = (int) round(ICON_SIZE * MARK_WIDTH_RATIO);
-    $markHeight = (int) round($markWidth * imagesy($markSilhouette) / imagesx($markSilhouette));
-
-    // The mark on its own transparent layer, centred, so it can be sampled per pixel.
-    $markLayer = blankCanvas(ICON_SIZE);
-    imagealphablending($markLayer, false);
-    imagecopyresampled(
-        $markLayer,
-        $markSilhouette,
-        (int) round((ICON_SIZE - $markWidth) / 2),
-        (int) round((ICON_SIZE - $markHeight) / 2),
-        0,
-        0,
-        $markWidth,
-        $markHeight,
-        imagesx($markSilhouette),
-        imagesy($markSilhouette),
-    );
-
-    $mask = plateMask(ICON_SIZE);
-    $icon = blankCanvas(ICON_SIZE);
-
-    for ($y = 0; $y < ICON_SIZE; $y++) {
-        // Vertical brand gradient.
-        $t = $y / (ICON_SIZE - 1);
-        $background = [
-            (int) round(GRADIENT_TOP[0] + (GRADIENT_BOTTOM[0] - GRADIENT_TOP[0]) * $t),
-            (int) round(GRADIENT_TOP[1] + (GRADIENT_BOTTOM[1] - GRADIENT_TOP[1]) * $t),
-            (int) round(GRADIENT_TOP[2] + (GRADIENT_BOTTOM[2] - GRADIENT_TOP[2]) * $t),
-        ];
-
-        for ($x = 0; $x < ICON_SIZE; $x++) {
-            $plate = ((imagecolorat($mask, $x, $y) >> 16) & 0xFF) / 255;
-
-            if ($plate <= 0.0) {
-                continue;
-            }
-
-            // White mark composited over the gradient, both clipped to the plate.
-            $markAlpha = (imagecolorat($markLayer, $x, $y) >> 24) & 0x7F;
-            $markCoverage = (127 - $markAlpha) / 127;
-
-            $red = (int) round($background[0] + (255 - $background[0]) * $markCoverage);
-            $green = (int) round($background[1] + (255 - $background[1]) * $markCoverage);
-            $blue = (int) round($background[2] + (255 - $background[2]) * $markCoverage);
-
-            imagesetpixel($icon, $x, $y, imagecolorallocatealpha($icon, $red, $green, $blue, (int) round((1 - $plate) * 127)));
-        }
-    }
-
-    return $icon;
-}
-
-/**
- * The tray icon is a black-plus-alpha template image, which macOS recolours for
- * the light and dark menu bar, including the inverted highlighted state.
- */
-function buildTrayIcon(GdImage $silhouette, int $size): GdImage
-{
-    $sourceWidth = imagesx($silhouette);
-    $sourceHeight = imagesy($silhouette);
-
-    // Black rather than white: a template image is a mask, and macOS reads the
-    // alpha channel, but keeping the RGB black avoids surprises anywhere the
-    // image is used untinted.
-    $black = imagecreatetruecolor($sourceWidth, $sourceHeight);
-    imagealphablending($black, false);
-    imagesavealpha($black, true);
-
-    for ($y = 0; $y < $sourceHeight; $y++) {
-        for ($x = 0; $x < $sourceWidth; $x++) {
-            $alpha = (imagecolorat($silhouette, $x, $y) >> 24) & 0x7F;
-            imagesetpixel($black, $x, $y, imagecolorallocatealpha($black, 0, 0, 0, $alpha));
-        }
-    }
-
-    // Fit within the square, preserving the aspect ratio, and centre it.
-    $scale = min($size / $sourceWidth, $size / $sourceHeight);
+    $box = $size * TRAY_CONTENT_RATIO;
+    $scale = min($box / $sourceWidth, $box / $sourceHeight);
     $targetWidth = (int) round($sourceWidth * $scale);
     $targetHeight = (int) round($sourceHeight * $scale);
 
-    $icon = blankCanvas($size);
-    imagealphablending($icon, false);
+    $icon = blankCanvas($size, $size);
+
     imagecopyresampled(
         $icon,
-        $black,
+        $glyph,
         (int) round(($size - $targetWidth) / 2),
         (int) round(($size - $targetHeight) / 2),
         0,
@@ -309,44 +244,47 @@ function write(GdImage $image, string $path): void
         fail("could not write {$path}");
     }
 
-    printf("%s (%dx%d, %s)\n", basename($path), imagesx($image), imagesy($image), number_format(filesize($path)).' bytes');
+    printf(
+        "  %-46s %dx%d, %s bytes\n",
+        str_replace(dirname(__DIR__, 2).'/', '', $path),
+        imagesx($image),
+        imagesy($image),
+        number_format(filesize($path)),
+    );
 }
 
-$publicDirectory = dirname(__DIR__, 2).'/public';
+$root = dirname(__DIR__, 2);
+$publicDirectory = $root.'/public';
 
 if (! is_dir($publicDirectory)) {
     fail("public/ is missing at {$publicDirectory}");
 }
 
-echo 'Rendering '.basename(SOURCE_SVG).' at '.RENDER_SIZE."px..\n";
+echo 'App icon from '.basename(APP_ICON_SOURCE).' (inset to '.PLATE_SIZE.' of '.ICON_SIZE.")\n";
 
-$markRender = renderSvg(SOURCE_SVG, RENDER_SIZE);
-$markBounds = contentBounds($markRender);
-
-printf("  artwork bounds %dx%d at (%d, %d)\n", $markBounds[2], $markBounds[3], $markBounds[0], $markBounds[1]);
-
-$appIcon = buildAppIcon(silhouette($markRender, $markBounds));
+$appIcon = buildAppIcon();
 
 write($appIcon, $publicDirectory.'/icon.png');
 
-// Also written into the published Electron project, because that is
-// electron-builder's buildResources directory and the source of the packaged
-// .icns. InstallsAppIcon intends to copy it there but resolves the path through
-// electronPath('build/icon.png'), which looks for a package.json inside build/,
-// does not find one, and silently falls back to the vendor copy instead.
-$electronBuildDirectory = dirname(__DIR__, 2).'/nativephp/electron/build';
+// Also written into the published Electron project: that is electron-builder's
+// buildResources directory and the source of the packaged .icns. InstallsAppIcon
+// intends to copy it there, but resolves electronPath('build/icon.png'), which
+// looks for a package.json inside build/, does not find one, and silently falls
+// back to the vendor copy instead.
+$electronBuildDirectory = $root.'/nativephp/electron/build';
 
 if (is_dir($electronBuildDirectory)) {
     write($appIcon, $electronBuildDirectory.'/icon.png');
 }
 
-echo 'Rendering '.basename(TRAY_SVG)." for the menu bar..\n";
+echo 'Tray icons from '.basename(TRAY_SVG)."\n";
 
-// Rendered generously large so the downsample to 16 and 32 is clean.
+// Rendered generously large so the downsample to 22 and 44 stays clean.
 $trayRender = renderSvg(TRAY_SVG, 512);
-$trayGlyph = silhouette($trayRender, contentBounds($trayRender));
+$trayGlyph = blackSilhouette($trayRender, contentBounds($trayRender));
 
-write(buildTrayIcon($trayGlyph, 16), $publicDirectory.'/IconTemplate.png');
-write(buildTrayIcon($trayGlyph, 32), $publicDirectory.'/IconTemplate@2x.png');
+foreach (TRAY_SIZES as $size => $fileName) {
+    write(buildTrayIcon($trayGlyph, $size), $publicDirectory.'/'.$fileName);
+}
 
 echo "Done. Restart native:run to pick these up.\n";

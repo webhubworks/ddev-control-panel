@@ -54,36 +54,59 @@ it('keeps the app icon at the size electron-builder needs', function () {
 
     expect(imagesx($image))->toBe(1024)
         ->and(imagesy($image))->toBe(1024);
+});
 
-    // Also committed into the published project: that is electron-builder's
-    // buildResources directory and the source of the packaged .icns.
+it('keeps the published app icon in step with public/icon.png', function () {
+    // electron-builder derives the packaged .icns from the published project's
+    // buildResources directory. InstallsAppIcon means to refresh it but resolves
+    // electronPath('build/icon.png'), which looks for a package.json inside
+    // build/, fails, and falls back to the vendor copy. So this file is ours to
+    // keep in sync, and `native:install --publish` puts the NativePHP logo back.
+    // A build does not fail when that happens: it just ships the wrong icon.
     expect(electronPath('build/icon.png'))->toBeFile();
+
+    expect(md5_file(electronPath('build/icon.png')))
+        ->toBe(md5_file(public_path('icon.png')));
 });
 
 it('keeps the tray icons as macOS template images', function (string $file, int $size) {
-    // A template image is a black-plus-alpha mask that macOS recolours for the
-    // light and dark menu bar. Without an alpha channel it renders as a block.
+    // 22x22 and 44x44 are the upstream tray sizes; anything else is scaled by
+    // the system and looks soft.
     $image = imagecreatefrompng(public_path($file));
 
     expect(imagesx($image))->toBe($size)
         ->and(imagesy($image))->toBe($size);
 
-    // The corners sit outside the glyph and must be fully transparent.
+    // A template image is read through its alpha channel only and tinted by the
+    // system, so it must be black over transparency with no background plate.
+    // Downscaling the app icon into it yields an opaque square instead.
     expect((imagecolorat($image, 0, 0) >> 24) & 0x7F)->toBe(127);
 
-    // And the glyph itself has to actually be there.
     $opaque = 0;
+    $coloured = 0;
 
     for ($y = 0; $y < $size; $y++) {
         for ($x = 0; $x < $size; $x++) {
-            if (((imagecolorat($image, $x, $y) >> 24) & 0x7F) < 40) {
-                $opaque++;
+            $pixel = imagecolorat($image, $x, $y);
+
+            if ((($pixel >> 24) & 0x7F) > 110) {
+                continue;
+            }
+
+            $opaque++;
+
+            if ((($pixel >> 16) & 0xFF) > 32 || (($pixel >> 8) & 0xFF) > 32 || ($pixel & 0xFF) > 32) {
+                $coloured++;
             }
         }
     }
 
-    expect($opaque)->toBeGreaterThan($size);
+    // The glyph is present, does not fill the whole frame (it needs the same
+    // margin upstream leaves), and is black rather than tinted.
+    expect($opaque)->toBeGreaterThan($size)
+        ->and($opaque)->toBeLessThan($size * $size * 0.75)
+        ->and($coloured)->toBe(0);
 })->with([
-    ['IconTemplate.png', 16],
-    ['IconTemplate@2x.png', 32],
+    ['IconTemplate.png', 22],
+    ['IconTemplate@2x.png', 44],
 ]);

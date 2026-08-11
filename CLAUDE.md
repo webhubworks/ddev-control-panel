@@ -112,32 +112,51 @@ silently:
 php resources/icons/build-icons.php    # then restart native:run
 ```
 
-Sources are `resources/icons/ddev-mark.svg` (the official ddev mark) and
-`resources/icons/tray-glyph.svg`. The generator has no dependencies: macOS QuickLook
-rasterises the SVG onto white, and the coverage is recovered from the red channel, because
-no SVG rasteriser (`rsvg-convert`, ImageMagick, sharp) is installed and a build must not
-require one.
+Two sources, because the app icon and the tray icon have incompatible requirements:
 
-**`public/` is the source of truth.** NativePHP's `InstallsAppIcon` trait copies
-`public/icon.png` and `public/IconTemplate*.png` into the vendor runtime directory
-(`vendor/nativephp/desktop/resources/build/`) on every `native:run` and `native:build`.
-Writing into that directory by hand does not survive, and writing only into
-`nativephp/electron/build/` has no effect on the tray at all: that was the cause of the
-menu bar showing NativePHP's own logo.
+| Source | Produces | Why |
+|---|---|---|
+| `resources/icons/app-icon.png` | `public/icon.png` | The finished artwork (dark plate, blue ddev mark), used as-is apart from the inset below |
+| `resources/icons/tray-glyph.svg` | `public/IconTemplate.png` (+`@2x`) | A menubar template is read through its **alpha channel only** and tinted by the system, so it must be black over transparency with no plate. Downscaling the app icon gives a solid blob |
 
-Two exceptions worth knowing:
+`resources/icons/ddev-mark.svg` is the official mark, kept as the provenance of the tray
+glyph. The generator needs no SVG rasteriser (`rsvg-convert`, ImageMagick, sharp are not
+installed and regenerating an icon must not require one): QuickLook rasterises onto white
+and the coverage is recovered from the red channel.
 
-- `nativephp/electron/build/icon.png` is also committed, because it is electron-builder's
-  `buildResources` directory and the source of the packaged `.icns`. The trait means to
-  copy it there but resolves `electronPath('build/icon.png')`, which looks for a
-  `package.json` inside `build/`, fails, and falls back to the vendor copy.
-- The tray needs `IconTemplate.png`; NativePHP ships its own, so a missing file does not
-  look broken, it looks like the app is still branded NativePHP.
+Sizes are not free choices. Tray templates are **22x22 and 44x44** (upstream's own sizes);
+anything else is scaled by the system and looks soft. Upstream leaves a 2px margin inside
+the 22x22, and `TRAY_CONTENT_RATIO` matches it so the item does not crowd its neighbours.
 
-The tray glyph is a **deliberate simplification** of the mark, not the mark itself. At 16pt
-the mark's seven concentric traces are sub-pixel and collapse into a grey blob, so the
-glyph keeps only the bowl, two traces and their contact dots. Template images must stay
-black plus alpha so macOS can recolour them for the light and dark menu bar.
+The supplied artwork is **full bleed**, which is the iOS convention. macOS insets app icons
+(the plate occupies 824 of 1024), so the generator scales it into that box; without it the
+icon renders visibly larger than everything else in the Dock. `PLATE_SIZE = ICON_SIZE` gives
+edge-to-edge instead.
+
+**`public/` is the source of truth, and there is no icon config.** NativePHP's
+`InstallsAppIcon` trait copies by filename out of `public/` into the vendor runtime
+directory (`vendor/nativephp/desktop/resources/build/`) on every `native:run` and
+`native:build`. Every one of those copies is `@`-suppressed, so a file that is missing or
+misnamed fails silently and the app keeps NativePHP's logo with nothing in the build output
+to say so. Writing into the runtime directory by hand does not survive the next copy, and
+writing only into `nativephp/electron/build/` does nothing for the tray at all: that was
+why the menu bar stayed branded NativePHP.
+
+One exception: `nativephp/electron/build/icon.png` is committed and kept byte-identical to
+`public/icon.png`, because it is electron-builder's `buildResources` directory and the
+source of the packaged `.icns`. The trait means to refresh it but resolves
+`electronPath('build/icon.png')`, which looks for a `package.json` inside `build/`, fails,
+and falls back to the vendor copy. `native:install --publish` puts the NativePHP logo back
+there, so a test compares the two hashes.
+
+The tray glyph is a **deliberate simplification** of the mark, not the mark itself. At 22pt
+the mark's seven concentric traces are sub-pixel and collapse into a grey blob, so the glyph
+keeps only the bowl, two traces and their contact dots.
+
+Because a wrong icon is invisible to the build, `tests/Feature/ElectronProjectTest.php` is
+the only cheap place to catch it: it asserts the `public/` files exist at the right sizes,
+that the templates are black over transparency and not a full-frame blob, and that the
+published copy still matches `public/icon.png`.
 
 ## Layout lives at `resources/views/layouts/app.blade.php`
 
