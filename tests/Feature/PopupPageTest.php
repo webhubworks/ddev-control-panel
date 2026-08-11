@@ -23,7 +23,7 @@ it('renders the popup page through its layout', function () {
 
     $this->get('/')
         ->assertOk()
-        ->assertSee('DDEV Control')
+        ->assertSee('DDEV Control Panel')
         ->assertSee('alpha-site')
         ->assertSee('OK')
         // The layout has to actually wrap the component.
@@ -34,7 +34,7 @@ it('renders the popup page through its layout', function () {
 it('renders before any snapshot exists', function () {
     // First launch: the background scan has not answered yet and the page still
     // has to come up rather than 500.
-    $this->get('/')->assertOk()->assertSee('DDEV Control');
+    $this->get('/')->assertOk()->assertSee('DDEV Control Panel');
 });
 
 it('opens with focus in the search field, not on an action button', function () {

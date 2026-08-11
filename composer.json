@@ -1,11 +1,13 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
-    "name": "laravel/laravel",
+    "name": "webhubworks/ddev-control-panel",
     "type": "project",
-    "description": "The skeleton application for the Laravel framework.",
+    "description": "A macOS menu bar app to start, stop and inspect your ddev projects.",
     "keywords": [
-        "laravel",
-        "framework"
+        "ddev",
+        "macos",
+        "menubar",
+        "nativephp"
     ],
     "license": "MIT",
     "require": {

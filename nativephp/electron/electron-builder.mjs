@@ -130,7 +130,8 @@ export default {
         name: fileName,
         // Electron prefers productName for app.getName(), which decides
         // app.getPath('userData'). Without this the whole installation (database,
-        // logs, window state) lands in "ddev-control" instead of "DDEV Control".
+        // logs, window state) lands in "ddev-control-panel" instead of
+        // "DDEV Control Panel".
         // Do not change this after release: a new name reads as a new, empty
         // install and the existing data appears to vanish.
         productName: appName,

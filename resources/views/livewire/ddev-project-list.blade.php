@@ -37,7 +37,7 @@
 >
     <header class="flex items-center justify-between gap-2 border-b border-zinc-200 px-3 py-2.5 dark:border-zinc-800">
         <div class="flex min-w-0 items-center gap-2">
-            <h1 class="truncate font-semibold">DDEV Control</h1>
+            <h1 class="truncate font-semibold">DDEV Control Panel</h1>
 
             @if ($snapshot !== null && ! $snapshot->failed())
                 <span class="rounded-full bg-zinc-500/10 px-2 py-0.5 text-xs font-medium tabular-nums text-zinc-600 dark:bg-zinc-400/10 dark:text-zinc-400">
@@ -82,8 +82,8 @@
                 type="button"
                 wire:click="quit"
                 class="cursor-pointer rounded-md p-1.5 text-zinc-500 transition-colors duration-150 hover:bg-red-500/10 hover:text-red-600 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none dark:hover:text-red-400"
-                title="Quit DDEV Control"
-                aria-label="Quit DDEV Control"
+                title="Quit DDEV Control Panel"
+                aria-label="Quit DDEV Control Panel"
             >
                 <x-icon name="logout" />
             </button>

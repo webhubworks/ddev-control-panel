@@ -1,4 +1,4 @@
-# DDEV Control
+# DDEV Control Panel
 
 A macOS **menu bar only** app (NativePHP + Electron) that lists the machine's ddev
 projects and runs lifecycle commands against them.
@@ -67,7 +67,7 @@ Not in the repo. NativePHP redirects storage to `app.getPath('userData')`:
 
 - **dev:** `~/Library/Application Support/nativephp/` (the published Electron project's
   `package.json` is named `nativephp`, and `extraMetadata` only applies to a packaged build)
-- **packaged:** `~/Library/Application Support/DDEV Control/`
+- **packaged:** `~/Library/Application Support/DDEV Control Panel/`
 
 The snapshot and operation state are plain cache files under
 `<userData>/storage/framework/cache/data`, which is the fastest way to see what the app

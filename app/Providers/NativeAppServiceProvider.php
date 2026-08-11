@@ -24,15 +24,15 @@ class NativeAppServiceProvider implements ProvidesPhpIni
         // popup is open.
         MenuBar::create()
             ->label('')
-            ->tooltip('DDEV Control')
+            ->tooltip('DDEV Control Panel')
             ->width(440)
             ->height(560)
             ->showDockIcon(false)
             ->withContextMenu(
                 Menu::make(
-                    Menu::label('DDEV Control'),
+                    Menu::label('DDEV Control Panel'),
                     Menu::separator(),
-                    Menu::quit('Quit DDEV Control'),
+                    Menu::quit('Quit DDEV Control Panel'),
                 )
             );
 
