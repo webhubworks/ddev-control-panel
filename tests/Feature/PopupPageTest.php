@@ -37,6 +37,32 @@ it('renders before any snapshot exists', function () {
     $this->get('/')->assertOk()->assertSee('DDEV Control');
 });
 
+it('opens with focus in the search field, not on an action button', function () {
+    // The header comes first in the DOM, so left alone the window focuses the
+    // refresh button: it shows a focus ring for no reason, and a stray Space or
+    // Enter fires it with delete one tab away.
+    app(DdevState::class)->putSnapshot([
+        ['name' => 'alpha-site', 'status' => 'stopped', 'status_desc' => 'stopped', 'type' => 'laravel', 'approot' => '/reps/alpha-site', 'shortroot' => '~/reps/alpha-site'],
+    ]);
+
+    $content = $this->get('/')->assertOk()->content();
+
+    // Exactly one autofocus target, and it is the search input.
+    expect(substr_count($content, 'autofocus'))->toBe(1);
+
+    preg_match('/<input\b[^>]*type="search"[^>]*>/', $content, $matches);
+
+    expect($matches)->not->toBeEmpty()
+        ->and($matches[0])->toContain('autofocus')
+        ->and($matches[0])->toContain('x-ref="search"');
+
+    // And focus is re-placed every time the popup comes back to the front,
+    // because the menubar window is hidden rather than destroyed.
+    expect($content)
+        ->toContain('$refs.search?.focus()')
+        ->toContain('x-on:focus.window');
+});
+
 it('renders the icons as inline svg rather than emoji', function () {
     app(DdevState::class)->putSnapshot([
         ['name' => 'alpha-site', 'status' => 'stopped', 'status_desc' => 'stopped', 'type' => 'laravel', 'approot' => '/reps/alpha-site', 'shortroot' => '~/reps/alpha-site'],

@@ -45,6 +45,18 @@ So no ddev command ever runs inside a request:
 `CACHE_STORE=file` and `SESSION_DRIVER=file` deliberately keep the hot path off SQLite,
 which the queue worker is writing to at the same time.
 
+## The popup has to place its own focus
+
+The menubar window is hidden, not destroyed, so reopening it fires no navigation. Two things
+hang off that, both handled by `opened()` on the component's root element:
+
+- It asks for a fresh snapshot itself, since nothing else would.
+- It moves focus into the search field. Left alone the window hands focus to the first
+  focusable element, which is a **header button**: it picks up a `:focus-visible` ring
+  (focus did not arrive by mouse) and a stray Space or Enter fires it, with delete one tab
+  away. Autofocusing search removes the hazard and is the useful default with this many
+  projects.
+
 The queue worker is auto-started by NativePHP (`nativephp.queue_workers`) and only when not
 running in console. If the popup sits on its loading skeleton forever, the worker is the
 first thing to check: look for `ChildProcess\ProcessSpawned` in the log.

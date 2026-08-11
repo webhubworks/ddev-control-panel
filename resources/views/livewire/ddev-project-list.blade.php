@@ -22,10 +22,18 @@
 <div
     class="flex h-screen flex-col"
     @if ($busy) wire:poll.{{ $pollInterval }}ms @endif
-    x-data
-    {{-- The menubar window is hidden rather than destroyed, so a reopen needs
-         to ask for fresh data itself. --}}
-    x-on:visibilitychange.document="if (! document.hidden) $wire.refreshProjects(true)"
+    {{--
+        opened() runs every time the popup comes back to the front. The menubar
+        window is hidden rather than destroyed, so it has to ask for fresh data
+        itself, and it has to place focus deliberately: left alone, the window
+        hands focus to the first focusable element, which is a header button. It
+        picks up a focus ring for no reason, and a stray Space or Enter fires it
+        with delete one tab away. The search field is the harmless target, and
+        the one actually worth typing into with this many projects.
+    --}}
+    x-data="{ opened() { $wire.refreshProjects(true); $refs.search?.focus() } }"
+    x-on:visibilitychange.document="if (! document.hidden) opened()"
+    x-on:focus.window="opened()"
 >
     <header class="flex items-center justify-between gap-2 border-b border-zinc-200 px-3 py-2.5 dark:border-zinc-800">
         <div class="flex min-w-0 items-center gap-2">
@@ -145,6 +153,8 @@
 
             <input
                 type="search"
+                x-ref="search"
+                autofocus
                 wire:model.live.debounce.200ms="search"
                 placeholder="Search projects"
                 autocomplete="off"
