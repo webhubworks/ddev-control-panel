@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+    <true/>
+    <!--
+      Required only while builds are ad-hoc signed. Hardened runtime enables
+      Library Validation, which demands every loaded library share the main
+      executable's Team ID; an ad-hoc signature has none, so macOS rejects
+      Electron Framework at load time and the app dies before main() with
+      "mapping process and mapped file (non-platform) have different Team IDs".
+      Remove this once the build is signed with a real Developer ID certificate.
+    -->
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+  </dict>
+</plist>

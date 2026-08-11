@@ -1,0 +1,33 @@
+@import 'tailwindcss';
+
+@source '../../storage/framework/views/*.php';
+@source '../views';
+
+@theme {
+    /*
+     * The system UI font, not a web font: a packaged desktop app cannot depend
+     * on the network, and SF Pro is what makes a menubar popup look native.
+     */
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+}
+
+/*
+ * A menubar popup is chrome, not a document: no text selection, no rubber-band
+ * scroll, no drag-and-drop of the UI itself.
+ */
+html {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-zinc-300) transparent;
+}
+
+@media (prefers-color-scheme: dark) {
+    html {
+        scrollbar-color: var(--color-zinc-700) transparent;
+    }
+}
+
+/* Inputs stay selectable even though the surrounding chrome is not. */
+input {
+    user-select: text;
+}
