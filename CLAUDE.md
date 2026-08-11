@@ -203,3 +203,36 @@ path (`views/components/layouts/`) fails with `No hint path defined for [layouts
 Bump `NATIVEPHP_APP_VERSION`, or a packaged build keeps the old schema and shows a bare
 `500 Server Error`. In dev run `php artisan native:migrate`, not `migrate`: plain `migrate`
 targets `database/database.sqlite`, which nothing reads.
+
+## Releasing
+
+```bash
+nvm use
+export GITHUB_TOKEN=$(gh auth token)
+php artisan native:build mac --publish
+```
+
+Three things are load bearing and none of them fail loudly:
+
+- **`NATIVEPHP_UPDATER_ENABLED` gates the publish target itself.** `electron-builder.mjs`
+  spreads `publish` into its config only when the updater is on, so with it off `--publish`
+  runs a build that has nowhere to upload to. It is not only a runtime toggle.
+- **`GH_TOKEN` comes from `GITHUB_TOKEN`** via the updater provider. `GITHUB_*` is in
+  `cleanup_env_keys`, so it is stripped from the packaged `.env`; prefer exporting it for
+  the build over writing it into `.env` at all.
+- **`native:build` never builds the Laravel assets.** It copies `public/` as it stands, so
+  a leftover `public/hot` from `npm run dev` ships an app that points at a Vite server that
+  is not running: unstyled serif page, no JS. `config/nativephp.php`'s `prebuild` runs
+  `npm run build` for exactly this, but a failing pre-process command is reported and then
+  **ignored**, so watch that step.
+
+Releases are created as drafts (`GITHUB_RELEASE_TYPE`), so nothing goes public on its own.
+
+The version that ships is `NATIVEPHP_APP_VERSION`, not a git tag, and `vPrefixedTagName` is
+on, so `0.0.1` uploads to a `v0.0.1` release.
+
+**The build is ad-hoc signed until `NATIVEPHP_APPLE_TEAM_ID` is set.** It runs here, but on
+any other Mac Gatekeeper reports it as damaged, and there is no way around that from the
+receiving side other than stripping the quarantine attribute by hand. A real release needs
+a Developer ID certificate plus `NATIVEPHP_APPLE_ID` and `NATIVEPHP_APPLE_ID_PASS` for
+notarization. `build/notarize.js` skips silently when they are missing.

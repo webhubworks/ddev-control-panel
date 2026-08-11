@@ -165,7 +165,18 @@ return [
      * Define your own scripts to run before and after the build process.
      */
     'prebuild' => [
-        // 'npm run build',
+        /*
+         * native:build copies public/ as it stands and never builds the Laravel
+         * assets itself. Without this a build inherits whatever the last
+         * `npm run dev` left behind: a stale public/build, and a public/hot
+         * pointing the packaged app at a Vite server that is not running, which
+         * ships an unstyled serif page with no JS. The root `prebuild` script
+         * removes public/hot before vite writes the real build.
+         *
+         * Note that a failing pre-process command is reported and then ignored,
+         * so watch this step rather than trusting the build to stop.
+         */
+        'npm run build',
     ],
 
     'postbuild' => [
