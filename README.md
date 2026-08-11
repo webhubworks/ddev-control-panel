@@ -1,58 +1,83 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# DDEV Control Panel
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+A macOS menu bar app that lists the [ddev](https://ddev.com) projects on your machine and
+runs lifecycle commands against them. No dock icon and no main window: the menu bar item is
+the only entry point.
 
-## About Laravel
+Built with [NativePHP](https://nativephp.com) (Laravel, Livewire and Electron).
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## What it does
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+- Lists every project `ddev list` knows about, with its status and primary URL.
+- Start, stop, restart and delete a project from its row.
+- `ddev poweroff` for everything at once.
+- Search, for when the list runs to dozens of projects.
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+Status text mirrors `ddev list` exactly, including the `running` to `OK` substitution and
+the mutagen suffix. Colour deliberately differs: ddev prints `stopped` in red, which reads
+as "everything is broken" once you have a few dozen projects, so stopped is neutral here and
+red is reserved for states that actually need attention.
 
-## Learning Laravel
+Deleting a project never passes `--omit-snapshot`, so a mis-click stays recoverable with
+`ddev snapshot restore`.
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+## Requirements
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+- macOS
+- ddev on the machine (Homebrew or the install script; the path is auto-detected)
+- PHP 8.3 or newer, Composer, and Node 22 for development
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+## Development
 
-## Agentic Development
+This project *drives* ddev, it is not itself a ddev project, so everything runs against the
+host toolchain. Electron needs a GUI and the macOS binaries the app shells out to.
 
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+Node 22 is required and pinned in `.nvmrc`. Node 24 silently truncates the zip extractions
+NativePHP depends on, and every symptom of that looks like an unrelated bug.
 
 ```bash
-composer require laravel/boost --dev
+nvm use
+composer install
+npm install
+cp .env.example .env && php artisan key:generate
 
-php artisan boost:install
+npm run dev              # separate terminal, for Vite
+php artisan native:run   # needs a TTY
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+PHP changes need `native:run` restarted. Only JS and CSS hot-reload through Vite.
 
-## Contributing
+Tests:
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+```bash
+php artisan test
+```
 
-## Code of Conduct
+### Why everything slow goes through the queue
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+`ddev list` inspects every project's containers and takes seconds on a machine with many
+projects. NativePHP serves the app with a single-worker `php -S`, so any blocking call
+freezes the whole popup. No ddev command ever runs inside a request: jobs write a snapshot
+to the cache, and the Livewire component only ever reads it.
 
-## Security Vulnerabilities
+### Icons
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+```bash
+php resources/icons/build-icons.php    # then restart native:run
+```
+
+`public/` is the source of truth. `resources/icons/app-icon.png` produces `public/icon.png`,
+and `resources/icons/ddev-mark.svg` produces the menu bar template images.
+
+## Building a release
+
+```bash
+export GITHUB_TOKEN=$(gh auth token)
+php artisan native:build mac --publish
+```
+
+Releases are created as drafts on GitHub and have to be published by hand.
 
 ## License
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+MIT.
