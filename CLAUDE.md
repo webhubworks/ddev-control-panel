@@ -209,11 +209,22 @@ targets `database/database.sqlite`, which nothing reads.
 ```bash
 nvm use
 export GITHUB_TOKEN=$(gh auth token)
-php artisan native:build mac --publish
+php artisan native:build mac arm64 --publish
 ```
 
-Three things are load bearing and none of them fail loudly:
+Name the architecture. Leaving it off only prompts for it, but answering `all` keeps
+`buildOS` at `mac`, which runs the `publish:mac` script, which is `publish:mac-arm64 --
+--x64` and builds both slices as separate ~150 MB artifacts. `arm64` is the only one worth
+shipping until someone asks for Intel.
 
+Four things are load bearing and none of them fail loudly:
+
+- **The publish policy must reach electron-builder exactly once.** Upstream's
+  `publish:mac-arm64` passes `-p always` twice, yargs collapses a repeated option into an
+  array, and `GitHubPublisher` compares `options.publish === "always"` against
+  `["always", "always"]`. The policy silently falls back to `onTagOrDraft`, the whole app
+  builds, and then every artifact is `skipped publishing`. `native:install --publish` puts
+  the duplicate back on every `composer update`, so `ElectronProjectTest` asserts it.
 - **`NATIVEPHP_UPDATER_ENABLED` gates the publish target itself.** `electron-builder.mjs`
   spreads `publish` into its config only when the updater is on, so with it off `--publish`
   runs a build that has nowhere to upload to. It is not only a runtime toggle.

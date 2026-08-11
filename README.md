@@ -73,7 +73,7 @@ and `resources/icons/ddev-mark.svg` produces the menu bar template images.
 
 ```bash
 export GITHUB_TOKEN=$(gh auth token)
-php artisan native:build mac --publish
+php artisan native:build mac arm64 --publish
 ```
 
 Releases are created as drafts on GitHub and have to be published by hand.

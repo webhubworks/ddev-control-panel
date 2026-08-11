@@ -26,6 +26,24 @@ it('keeps the productName that decides where user data lives', function () {
     expect($builder)->toContain('productName: appName');
 });
 
+it('passes the publish policy to electron-builder exactly once', function () {
+    // Upstream's publish:mac-arm64, publish:mac-x64 and publish:linux-arm64 pass
+    // `-p always` twice. yargs collapses a repeated option into an array, so
+    // electron-builder receives ["always", "always"] and GitHubPublisher's
+    // `options.publish === "always"` check fails against it. The policy falls
+    // back to onTagOrDraft: the whole app builds, then every artifact is
+    // "skipped publishing ... release doesn't exist and not created because
+    // publish is not always and build is not on tag". Nothing fails.
+    $scripts = collect(json_decode(file_get_contents(electronPath('package.json')), true)['scripts'])
+        ->filter(fn (string $command, string $name): bool => str_starts_with($name, 'publish:'));
+
+    expect($scripts)->not->toBeEmpty();
+
+    $duplicated = $scripts->filter(fn (string $command): bool => substr_count($command, '-p always') > 1);
+
+    expect($duplicated->keys()->all())->toBe([]);
+});
+
 it('keeps the entitlement an ad-hoc signed build needs to launch', function () {
     $entitlements = file_get_contents(electronPath('build/entitlements.mac.plist'));
 
