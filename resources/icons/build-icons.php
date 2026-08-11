@@ -30,12 +30,6 @@ const ICON_SIZE = 1024;
 const PLATE_SIZE = 824;
 
 /**
- * The mark's blue, sampled from app-icon.png rather than taken from ddev's
- * official #02a8e2, so the menu bar matches the app icon it sits next to.
- */
-const MARK_BLUE = [0x3F, 0x92, 0xFF];
-
-/**
  * Upstream tray sizes: NativePHP's own IconTemplate.png is 22x22 and its @2x is
  * 44x44. Anything else is scaled by the system and looks soft.
  *
@@ -279,24 +273,20 @@ if (is_dir($electronBuildDirectory)) {
     write($appIcon, $electronBuildDirectory.'/icon.png');
 }
 
-echo 'Menu bar icons from '.basename(MARK_SVG)."\n";
+echo 'Menu bar templates from '.basename(MARK_SVG)."\n";
 
 // Rendered generously large so the downsample to 22 and 44 stays clean.
 $markRender = renderSvg(MARK_SVG, 512);
 $markBounds = contentBounds($markRender);
 
-$blueMark = silhouette($markRender, $markBounds, MARK_BLUE);
-$blackMark = silhouette($markRender, $markBounds, [0, 0, 0]);
+// A macOS template image is a mask: only the alpha channel is read, and the
+// system paints it in the menu bar's label colour, which is white on a dark bar
+// and near-black on a light one. The RGB is therefore irrelevant and is written
+// black by convention.
+$mark = silhouette($markRender, $markBounds, [0, 0, 0]);
 
 foreach (TRAY_SIZES as $size => $suffix) {
-    // The icon actually used. The name must NOT end in "Template": macOS treats
-    // any such image as a mask and tints it, which would throw the blue away.
-    // Electron finds the @2x variant alongside the 1x path on its own.
-    write(buildTrayIcon($blueMark, $size), $publicDirectory."/tray{$suffix}.png");
-
-    // Template fallback, on brand rather than NativePHP's logo, for the path
-    // NativePHP takes when no explicit icon is set.
-    write(buildTrayIcon($blackMark, $size), $publicDirectory."/IconTemplate{$suffix}.png");
+    write(buildTrayIcon($mark, $size), $publicDirectory."/IconTemplate{$suffix}.png");
 }
 
 echo "Done. Restart native:run to pick these up.\n";

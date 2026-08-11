@@ -115,37 +115,28 @@ php resources/icons/build-icons.php    # then restart native:run
 | Source | Produces | Notes |
 |---|---|---|
 | `resources/icons/app-icon.png` | `public/icon.png` | The finished artwork (dark plate, blue ddev mark), used as-is apart from the inset below |
-| `resources/icons/ddev-mark.svg` | `public/tray.png` (+`@2x`) | The mark in its blue: the menu bar icon actually used |
-| `resources/icons/ddev-mark.svg` | `public/IconTemplate.png` (+`@2x`) | The same mark in black: the template fallback |
+| `resources/icons/ddev-mark.svg` | `public/IconTemplate.png` (+`@2x`) | The real ddev mark as a macOS template image, for the menu bar |
 
 The generator needs no SVG rasteriser (`rsvg-convert`, ImageMagick and sharp are not
 installed, and regenerating an icon must not require one): QuickLook rasterises onto white
 and the coverage is recovered from the red channel.
 
-### The menu bar icon is a colour icon, and its filename is load bearing
+### The menu bar uses a template image, which is how the mark comes out white
 
-**macOS tints any image whose name ends in `Template` as a mask**, which throws the blue
-away. So the icon is `tray.png`, not `IconTemplate.png`, and it has to be passed explicitly,
-because NativePHP otherwise falls back to `IconTemplate.png`:
+A macOS template image is a **mask**: only the alpha channel is read, and the system paints
+it in the menu bar's label colour. That gives white on a dark menu bar, near-black on a
+light one, and an inverted icon while the popup is open. The RGB in the file is irrelevant,
+and is written black by convention.
 
-```php
-MenuBar::create()->icon(config('ddev.tray_icon'))   // public/tray.png
-```
-
-Electron finds `tray@2x.png` alongside the 1x path by itself. Retina renders the 44px one,
-which is the only size most machines will ever show.
-
-The trade is that a colour icon does **not** adapt to the light and dark menu bar, does not
-invert while the popup is open, and ignores system tinting. That is the accepted cost of
-keeping the mark on brand. `public/IconTemplate.png` is still generated, in black, so the
-fallback path is the ddev mark rather than the NativePHP logo.
-
-The blue is `#3F92FF`, **sampled from `app-icon.png`** rather than ddev's official
-`#02a8e2`, so the menu bar matches the app icon it sits beside.
+This is why there is **no `MenuBar::icon()` call** in `NativeAppServiceProvider`: NativePHP
+resolves the tray image to `build/IconTemplate.png` on its own, and that is exactly what we
+want. Passing a coloured PNG instead would pin one colour and lose the tinting, and it could
+not be named `*Template.png` either, since macOS would mask it and throw the colour away.
 
 Sizes are not free choices: **22x22 and 44x44** are upstream's own tray sizes, and anything
-else is scaled by the system and looks soft. At 22px (non-retina) the mark is genuinely
-dense; that is the cost of using the real logo instead of a simplification.
+else is scaled by the system and looks soft. Retina renders the 44px one, which is the only
+size most machines will ever show. At 22px the mark is genuinely dense; that is the cost of
+using the real logo rather than a simplified glyph.
 
 ### The app icon is inset, because the artwork is full bleed
 
@@ -158,9 +149,8 @@ edge-to-edge instead.
 hides its dock icon, so `icon.png` only appears in a packaged build. The menu bar is the only
 icon dev can tell you anything about.
 
-`config('ddev.tray_icon')` resolves through `public_path()`, so a packaged build reads it
-from inside the bundle. Worth confirming on the first real `native:build` that `public/` is
-bundled (skill section 9).
+The tray image is read from the vendor runtime build directory, which `extraResources` copies
+into the packaged app, so it needs nothing from `public/` at runtime.
 
 **`public/` is the source of truth, and there is no icon config.** NativePHP's
 `InstallsAppIcon` trait copies by filename out of `public/` into the vendor runtime

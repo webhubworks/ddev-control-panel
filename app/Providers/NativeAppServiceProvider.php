@@ -17,8 +17,12 @@ class NativeAppServiceProvider implements ProvidesPhpIni
      */
     public function boot(): void
     {
+        // No ->icon() call: NativePHP resolves the tray image to
+        // build/IconTemplate.png, which InstallsAppIcon copies out of public/.
+        // As a template image macOS paints it in the menu bar's label colour, so
+        // it is white on a dark bar, dark on a light one, and inverts while the
+        // popup is open.
         MenuBar::create()
-            ->icon(config('ddev.tray_icon'))
             ->label('')
             ->tooltip('DDEV Control')
             ->width(440)
