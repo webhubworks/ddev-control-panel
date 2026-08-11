@@ -22,4 +22,14 @@ return [
      * is in flight. Polls are cheap: they only read the cache.
      */
     'poll_interval' => env('DDEV_POLL_INTERVAL', 1500),
+
+    /*
+     * The menu bar icon: the ddev mark in its own blue.
+     *
+     * Passed to MenuBar::icon() explicitly, because NativePHP otherwise falls
+     * back to IconTemplate.png, and macOS tints any image whose name ends in
+     * "Template" as a mask, which would throw the colour away. Electron picks up
+     * the @2x variant sitting alongside this path by itself.
+     */
+    'tray_icon' => public_path('tray.png'),
 ];

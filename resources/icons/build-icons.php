@@ -1,7 +1,7 @@
 <?php
 
 /**
- * Regenerates the app icon and the menu bar tray icons.
+ * Regenerates the app icon and the menu bar icons.
  *
  *   php resources/icons/build-icons.php
  *
@@ -11,21 +11,13 @@
  * every native:run and native:build. Every one of those copies is @-suppressed,
  * so a file that is missing or misnamed fails silently and the app ships the
  * NativePHP logo with nothing in the build output to say so.
- *
- * Two separate sources, because the two icons have incompatible requirements:
- *
- *  - app-icon.png is the finished artwork, used as-is apart from being inset
- *    onto the macOS icon grid.
- *  - tray-glyph.svg is a simplified line drawing. A menu bar template image is
- *    read through its alpha channel only and tinted by the system, so it has to
- *    be black over transparency with no background plate. Downscaling the app
- *    icon into it would produce a solid blob.
  */
 
 /** The supplied 1024x1024 artwork: a dark plate with the ddev mark. */
 const APP_ICON_SOURCE = __DIR__.'/app-icon.png';
 
-const TRAY_SVG = __DIR__.'/tray-glyph.svg';
+/** The official ddev mark, used for the menu bar. */
+const MARK_SVG = __DIR__.'/ddev-mark.svg';
 
 const ICON_SIZE = 1024;
 
@@ -38,22 +30,24 @@ const ICON_SIZE = 1024;
 const PLATE_SIZE = 824;
 
 /**
- * Upstream tray sizes. NativePHP's own IconTemplate.png is 22x22 and its @2x is
- * 44x44; anything else is scaled by the system and looks soft.
+ * The mark's blue, sampled from app-icon.png rather than taken from ddev's
+ * official #02a8e2, so the menu bar matches the app icon it sits next to.
+ */
+const MARK_BLUE = [0x3F, 0x92, 0xFF];
+
+/**
+ * Upstream tray sizes: NativePHP's own IconTemplate.png is 22x22 and its @2x is
+ * 44x44. Anything else is scaled by the system and looks soft.
  *
  * @var array<int, string>
  */
-const TRAY_SIZES = [
-    22 => 'IconTemplate.png',
-    44 => 'IconTemplate@2x.png',
-];
+const TRAY_SIZES = [22 => '', 44 => '@2x'];
 
 /**
- * Fraction of the template the glyph fills. NativePHP's own 22x22 template uses
- * an 18x18 glyph with a 2px margin all round, and matching that keeps the item
- * from crowding its neighbours in the menu bar.
+ * Fraction of the frame the mark fills. Higher than a simple glyph would need,
+ * because the mark is dense and every pixel counts at 22px.
  */
-const TRAY_CONTENT_RATIO = 18 / 22;
+const TRAY_CONTENT_RATIO = 0.95;
 
 function fail(string $message): never
 {
@@ -182,13 +176,16 @@ function contentBounds(GdImage $image): array
 }
 
 /**
- * Turn the white-backed render into black over transparency, cropped to the
- * artwork. The glyph is drawn in pure black, so the red channel is an exact
- * anti-aliased coverage mask.
+ * Recolour the white-backed render into $colour over transparency, cropped to
+ * the artwork.
+ *
+ * The mark is drawn in #02a8e2, whose red channel is 2 against a white 255, so
+ * red is an accurate anti-aliased coverage mask.
  *
  * @param  array{int, int, int, int}  $bounds
+ * @param  array{int, int, int}  $colour
  */
-function blackSilhouette(GdImage $render, array $bounds): GdImage
+function silhouette(GdImage $render, array $bounds, array $colour): GdImage
 {
     [$x, $y, $width, $height] = $bounds;
 
@@ -197,9 +194,15 @@ function blackSilhouette(GdImage $render, array $bounds): GdImage
     for ($row = 0; $row < $height; $row++) {
         for ($column = 0; $column < $width; $column++) {
             $red = (imagecolorat($render, $x + $column, $y + $row) >> 16) & 0xFF;
-            $alpha = (int) round($red / 255 * 127);
+            $coverage = max(0.0, min(1.0, (255 - $red) / 253));
 
-            imagesetpixel($out, $column, $row, imagecolorallocatealpha($out, 0, 0, 0, $alpha));
+            imagesetpixel($out, $column, $row, imagecolorallocatealpha(
+                $out,
+                $colour[0],
+                $colour[1],
+                $colour[2],
+                (int) round((1 - $coverage) * 127),
+            ));
         }
     }
 
@@ -207,8 +210,7 @@ function blackSilhouette(GdImage $render, array $bounds): GdImage
 }
 
 /**
- * Fit the glyph into a square template image, preserving its aspect ratio and
- * leaving the same margin upstream does.
+ * Fit the mark into a square menu bar image, preserving its aspect ratio.
  */
 function buildTrayIcon(GdImage $glyph, int $size): GdImage
 {
@@ -245,7 +247,7 @@ function write(GdImage $image, string $path): void
     }
 
     printf(
-        "  %-46s %dx%d, %s bytes\n",
+        "  %-42s %2dx%-4d %s bytes\n",
         str_replace(dirname(__DIR__, 2).'/', '', $path),
         imagesx($image),
         imagesy($image),
@@ -277,14 +279,24 @@ if (is_dir($electronBuildDirectory)) {
     write($appIcon, $electronBuildDirectory.'/icon.png');
 }
 
-echo 'Tray icons from '.basename(TRAY_SVG)."\n";
+echo 'Menu bar icons from '.basename(MARK_SVG)."\n";
 
 // Rendered generously large so the downsample to 22 and 44 stays clean.
-$trayRender = renderSvg(TRAY_SVG, 512);
-$trayGlyph = blackSilhouette($trayRender, contentBounds($trayRender));
+$markRender = renderSvg(MARK_SVG, 512);
+$markBounds = contentBounds($markRender);
 
-foreach (TRAY_SIZES as $size => $fileName) {
-    write(buildTrayIcon($trayGlyph, $size), $publicDirectory.'/'.$fileName);
+$blueMark = silhouette($markRender, $markBounds, MARK_BLUE);
+$blackMark = silhouette($markRender, $markBounds, [0, 0, 0]);
+
+foreach (TRAY_SIZES as $size => $suffix) {
+    // The icon actually used. The name must NOT end in "Template": macOS treats
+    // any such image as a mask and tints it, which would throw the blue away.
+    // Electron finds the @2x variant alongside the 1x path on its own.
+    write(buildTrayIcon($blueMark, $size), $publicDirectory."/tray{$suffix}.png");
+
+    // Template fallback, on brand rather than NativePHP's logo, for the path
+    // NativePHP takes when no explicit icon is set.
+    write(buildTrayIcon($blackMark, $size), $publicDirectory."/IconTemplate{$suffix}.png");
 }
 
 echo "Done. Restart native:run to pick these up.\n";

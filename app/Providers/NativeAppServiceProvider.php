@@ -18,6 +18,7 @@ class NativeAppServiceProvider implements ProvidesPhpIni
     public function boot(): void
     {
         MenuBar::create()
+            ->icon(config('ddev.tray_icon'))
             ->label('')
             ->tooltip('DDEV Control')
             ->width(440)

@@ -49,6 +49,55 @@ it('ships the icons in public, which is where NativePHP reads them from', functi
         ->and(public_path('IconTemplate@2x.png'))->toBeFile();
 });
 
+it('points the menu bar at a colour icon that is not a template', function () {
+    $icon = config('ddev.tray_icon');
+
+    expect($icon)->toBeFile();
+
+    // macOS tints any image whose name ends in "Template" as a mask, which would
+    // throw the mark's blue away. The name is load bearing.
+    expect(basename($icon, '.png'))->not->toEndWith('Template');
+
+    // Electron looks for the @2x variant alongside the 1x path, and retina is
+    // the only size most machines will ever render.
+    $retina = preg_replace('/\.png$/', '@2x.png', $icon);
+
+    expect($retina)->toBeFile();
+
+    foreach ([$icon => 22, $retina => 44] as $path => $size) {
+        $image = imagecreatefrompng($path);
+
+        expect(imagesx($image))->toBe($size)
+            ->and(imagesy($image))->toBe($size)
+            // No background plate: the mark sits on transparency.
+            ->and((imagecolorat($image, 0, 0) >> 24) & 0x7F)->toBe(127);
+    }
+});
+
+it('keeps the menu bar mark blue rather than a flat silhouette', function () {
+    $image = imagecreatefrompng(config('ddev.tray_icon'));
+    $size = imagesx($image);
+
+    $blue = 0;
+
+    for ($y = 0; $y < $size; $y++) {
+        for ($x = 0; $x < $size; $x++) {
+            $pixel = imagecolorat($image, $x, $y);
+
+            if ((($pixel >> 24) & 0x7F) > 60) {
+                continue;
+            }
+
+            // Blue channel clearly dominant over red: the ddev mark's colour.
+            if (($pixel & 0xFF) > (($pixel >> 16) & 0xFF) + 40) {
+                $blue++;
+            }
+        }
+    }
+
+    expect($blue)->toBeGreaterThan($size);
+});
+
 it('keeps the app icon at the size electron-builder needs', function () {
     $image = imagecreatefrompng(public_path('icon.png'));
 
@@ -101,8 +150,9 @@ it('keeps the tray icons as macOS template images', function (string $file, int 
         }
     }
 
-    // The glyph is present, does not fill the whole frame (it needs the same
-    // margin upstream leaves), and is black rather than tinted.
+    // The glyph is present, is not a solid block, and is black rather than
+    // tinted. This is the fallback NativePHP uses when no explicit icon is set,
+    // so it stays on brand instead of reverting to the NativePHP logo.
     expect($opaque)->toBeGreaterThan($size)
         ->and($opaque)->toBeLessThan($size * $size * 0.75)
         ->and($coloured)->toBe(0);
