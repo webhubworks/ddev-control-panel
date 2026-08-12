@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Support\Ddev\DdevBinary;
 use App\Support\Ddev\DdevState;
+use App\Support\Docker\DockerBinary;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\ServiceProvider;
 
@@ -18,6 +19,11 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(
             DdevBinary::class,
             fn (): DdevBinary => new DdevBinary(config('ddev.binary_path')),
+        );
+
+        $this->app->singleton(
+            DockerBinary::class,
+            fn (): DockerBinary => new DockerBinary(config('ddev.docker_binary_path')),
         );
 
         $this->app->singleton(

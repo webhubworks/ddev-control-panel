@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Jobs\RefreshDdevProjectsJob;
 use Native\Desktop\Contracts\ProvidesPhpIni;
+use Native\Desktop\Facades\ChildProcess;
 use Native\Desktop\Facades\Menu;
 use Native\Desktop\Facades\MenuBar;
 
@@ -39,6 +40,32 @@ class NativeAppServiceProvider implements ProvidesPhpIni
         // Warm the project list before the user first opens the popup, so it is
         // not staring at a skeleton while `ddev list` takes its several seconds.
         RefreshDdevProjectsJob::dispatch();
+
+        $this->watchDdevEvents();
+    }
+
+    /**
+     * Listen to Docker for the rest of the app's life, so that starting a
+     * project from a terminal is reflected here within seconds.
+     *
+     * Persistent, so Electron restarts it if it dies. It costs nothing while
+     * idle: the process sits on a blocking `docker events` stream and does no
+     * work until Docker has something to report.
+     */
+    private function watchDdevEvents(): void
+    {
+        if (! config('ddev.watch.enabled')) {
+            return;
+        }
+
+        ChildProcess::artisan(
+            'ddev:watch',
+            alias: 'ddev-watch',
+            persistent: true,
+            // The stream never ends on purpose, so the default execution limit
+            // would kill the watcher a minute in.
+            iniSettings: ['max_execution_time' => '0'],
+        );
     }
 
     /**

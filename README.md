@@ -12,6 +12,8 @@ Built with [NativePHP](https://nativephp.com) (Laravel, Livewire and Electron).
 - Start, stop, restart and delete a project from its row.
 - `ddev poweroff` for everything at once.
 - Search, for when the list runs to dozens of projects.
+- Keeps up on its own: start or stop a project in a terminal and the list follows within
+  seconds, whether the popup is open or not.
 
 Status text mirrors `ddev list` exactly, including the `running` to `OK` substitution and
 the mutagen suffix. Colour deliberately differs: ddev prints `stopped` in red, which reads
@@ -59,6 +61,18 @@ php artisan test
 projects. NativePHP serves the app with a single-worker `php -S`, so any blocking call
 freezes the whole popup. No ddev command ever runs inside a request: jobs write a snapshot
 to the cache, and the Livewire component only ever reads it.
+
+### How it notices changes made outside the app
+
+ddev has nothing to subscribe to: it is a one shot CLI, and its hooks live in each project's
+`.ddev/config.yaml` rather than globally. Docker does have an event stream, and ddev labels
+every container it creates, so `php artisan ddev:watch` follows
+`docker events --filter label=com.ddev.platform=ddev` and asks for a new snapshot once the
+events settle. It runs as a supervised child process for the life of the app, and costs
+nothing while Docker has nothing to report.
+
+Set `DDEV_WATCH_ENABLED=false` to turn it off and go back to refreshing only when the popup
+is opened.
 
 ### Icons
 

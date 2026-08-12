@@ -21,7 +21,13 @@
 
 <div
     class="flex h-screen flex-col"
-    @if ($busy) wire:poll.{{ $pollInterval }}ms @endif
+    {{--
+        Always polling, faster while something is in flight. A poll only reads
+        the cache, and it is how an open popup picks up the snapshot the Docker
+        watcher writes from outside the request. Livewire stops polling on its
+        own once the window is hidden.
+    --}}
+    wire:poll.{{ $busy ? $pollInterval : $idlePollInterval }}ms
     {{--
         opened() runs every time the popup comes back to the front. The menubar
         window is hidden rather than destroyed, so it has to ask for fresh data

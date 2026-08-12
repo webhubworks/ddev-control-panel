@@ -209,6 +209,7 @@ class DdevProjectList extends Component
     {
         return view('livewire.ddev-project-list', [
             'pollInterval' => (int) config('ddev.poll_interval'),
+            'idlePollInterval' => (int) config('ddev.idle_poll_interval'),
         ]);
     }
 

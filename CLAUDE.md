@@ -39,18 +39,68 @@ So no ddev command ever runs inside a request:
 
 - `RefreshDdevProjectsJob` runs `ddev list` and writes a snapshot to the cache.
 - `RunDdevOperationJob` runs one lifecycle command and records its state.
-- The Livewire component only ever reads the cache, and polls **only while something is in
-  flight** (`isBusy()`).
+- The Livewire component only ever reads the cache. It polls slowly while open and faster
+  while something is in flight (`isBusy()`), and a poll never costs more than a cache read.
 
 `CACHE_STORE=file` and `SESSION_DRIVER=file` deliberately keep the hot path off SQLite,
 which the queue worker is writing to at the same time.
+
+## Docker is the event source, because ddev has none
+
+Start a project in a terminal and this app has to find out somehow. ddev cannot tell it:
+
+- It is a one shot CLI. No daemon, no socket, nothing to subscribe to.
+- Its hooks (`post-start`, `post-stop`, ...) are **per project**, in each
+  `.ddev/config.yaml`. There is no global hooks key, so they would have to be written into
+  every repo on the machine, and they would still only fire for changes that went through
+  ddev.
+- `ddev list --continuous` is a real stream, but it re-scans everything each interval:
+  seconds of wall clock and CPU, forever. Not something a menu bar app should do.
+
+Docker is the one thing that reports every change, and it is usable here because **ddev
+labels every container it creates** (`com.ddev.site-name`, `com.ddev.approot`,
+`com.ddev.platform=ddev`). So `ddev:watch` (`WatchDdevEventsCommand`) follows
+`docker events` filtered to that label, and asks for a refresh when the events go quiet.
+`NativeAppServiceProvider` runs it as a **persistent child process**, so it is supervised
+and restarted like the queue worker.
+
+Four things about that stream are worth knowing before touching it:
+
+- **`health_status` has to be in the filter.** A project prints `running` until its
+  healthchecks pass and `OK` afterwards, and that event is the only thing that reports the
+  difference. It arrives seconds after `start`.
+- **The `exec_*` actions are pure noise.** Every container runs its healthcheck through
+  `docker exec` every 30 seconds. Both the Docker side filter and `DockerEvent::isRelevant()`
+  drop them.
+- **`ddev exec` / `ddev composer` fire a full create/start/die/destroy sequence** for a
+  throwaway container that carries the project's labels while nothing about the project
+  changes. `DockerEvent` drops those by the compose `oneoff` label and the `-run-<hash>`
+  name.
+- **Docker's replay buffer is tiny**, and the healthcheck chatter flushes it within minutes.
+  `docker events --since 1h` being empty says nothing about the live stream.
+
+The watcher refreshes **on attach** as well, not only on events: Docker reports what happens
+next, never what already happened, so anything that changed while the app was closed or
+Docker was restarting would otherwise never be noticed. That resync waits a few ticks for the
+stream to prove itself alive, because `docker events` exits immediately while Docker is not
+running and the watcher retries every few seconds: resyncing per attempt would mean a failing
+`ddev list` on a loop for as long as Docker stays closed.
+
+It also skips a refresh while one is already in flight, and keeps the event pending rather
+than dropping it, so a change that lands mid scan is picked up by the next one.
+
+If the list is stale, `ddev:watch` is the thing to check. It logs when it cannot start
+(`docker` not found) and when it loses the stream (Docker not running), and it prints each
+event it acts on, which lands in the app's child process output.
 
 ## The popup has to place its own focus
 
 The menubar window is hidden, not destroyed, so reopening it fires no navigation. Two things
 hang off that, both handled by `opened()` on the component's root element:
 
-- It asks for a fresh snapshot itself, since nothing else would.
+- It asks for a fresh snapshot itself, since no navigation happens to do it. The Docker
+  watcher usually got there first, so this is the fallback for a watcher that is off or
+  cannot reach Docker.
 - It moves focus into the search field. Left alone the window hands focus to the first
   focusable element, which is a **header button**: it picks up a `:focus-visible` ring
   (focus did not arrive by mouse) and a stray Space or Enter fires it, with delete one tab
