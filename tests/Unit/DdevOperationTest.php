@@ -26,16 +26,39 @@ it('never passes --omit-snapshot, so a delete stays recoverable', function () {
         ->not->toContain('-O');
 });
 
-it('scopes every per-project command to a single project', function (DdevOperation $operation) {
+it('never lets a command act on every project by accident', function (DdevOperation $operation) {
+    // -a / --all would act on every project on the machine.
     expect($operation->arguments('example'))
-        ->toContain('example')
-        // -a / --all would act on every project on the machine.
         ->not->toContain('--all')
         ->not->toContain('-a');
+})->with(DdevOperation::cases());
+
+it('scopes every per-project command to a single project', function (DdevOperation $operation) {
+    expect($operation->arguments('example'))->toContain('example');
 })->with(array_filter(
     DdevOperation::cases(),
-    fn (DdevOperation $operation): bool => ! $operation->isGlobal(),
+    fn (DdevOperation $operation): bool => ! $operation->isGlobal() && ! $operation->runsInProjectDirectory(),
 ));
+
+it('scopes a host command by its working directory instead', function () {
+    // `ddev tableplus` is a script in ~/.ddev/commands/host/. It takes no
+    // project argument and ddev refuses to run it outside a project directory,
+    // so passing the name would only make it error.
+    expect(DdevOperation::OpenDatabase->arguments('example'))->toBe(['tableplus'])
+        ->and(DdevOperation::OpenDatabase->runsInProjectDirectory())->toBeTrue()
+        ->and(DdevOperation::OpenDatabase->isGlobal())->toBeFalse()
+        ->and(DdevOperation::OpenDatabase->isDestructive())->toBeFalse();
+});
+
+it('only re-scans ddev after a command that changed something', function () {
+    // A `ddev list` costs seconds, and opening the database changes nothing.
+    expect(DdevOperation::OpenDatabase->changesProjectState())->toBeFalse()
+        ->and(DdevOperation::Start->changesProjectState())->toBeTrue()
+        ->and(DdevOperation::Stop->changesProjectState())->toBeTrue()
+        ->and(DdevOperation::Restart->changesProjectState())->toBeTrue()
+        ->and(DdevOperation::Delete->changesProjectState())->toBeTrue()
+        ->and(DdevOperation::Poweroff->changesProjectState())->toBeTrue();
+});
 
 it('runs poweroff with no arguments at all', function () {
     // `ddev poweroff` takes no project and no flags; passing one would error.
@@ -46,9 +69,12 @@ it('runs poweroff with no arguments at all', function () {
 });
 
 it('treats only poweroff as machine wide', function () {
-    $global = array_filter(DdevOperation::cases(), fn (DdevOperation $o): bool => $o->isGlobal());
+    $global = array_values(array_filter(
+        DdevOperation::cases(),
+        fn (DdevOperation $operation): bool => $operation->isGlobal(),
+    ));
 
-    expect($global)->toBe([4 => DdevOperation::Poweroff]);
+    expect($global)->toBe([DdevOperation::Poweroff]);
 });
 
 it('allows container pulls enough time on start and restart', function () {

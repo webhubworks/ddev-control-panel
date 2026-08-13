@@ -274,16 +274,96 @@
                             --}}
                             <div class="flex items-center gap-0.5 opacity-70 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
                                 @if ($project->status->isRunning())
+                                    {{--
+                                        A native popover, so the menu lives in the top layer
+                                        and is not clipped by the scrolling list, and so
+                                        light dismiss and Escape come for free. It is placed
+                                        by CSS anchor positioning, which follows the row as
+                                        the list scrolls without any JS.
+
+                                        Keyed by a hash of the project name: ddev allows
+                                        dots in a name and a CSS ident does not.
+                                    --}}
+                                    @php
+                                        $menuId = 'open-menu-'.substr(md5($project->name), 0, 8);
+                                        $menuAnchor = '--anchor-'.substr(md5($project->name), 0, 8);
+                                        $menuItemClasses = 'flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left transition-colors duration-150 hover:bg-zinc-500/10 focus-visible:bg-zinc-500/10 focus-visible:outline-none disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent';
+                                    @endphp
+
                                     <button
                                         type="button"
-                                        wire:click="openUrl(@js($project->name))"
-                                        @disabled($pending || blank($project->primaryUrl))
-                                        class="cursor-pointer rounded p-1 text-zinc-500 transition-colors duration-150 hover:bg-zinc-500/10 hover:text-zinc-900 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none disabled:cursor-default disabled:opacity-30 dark:hover:text-zinc-100"
-                                        title="Open {{ $project->primaryUrl }}"
-                                        aria-label="Open {{ $project->name }} in browser"
+                                        popovertarget="{{ $menuId }}"
+                                        style="anchor-name: {{ $menuAnchor }}"
+                                        @disabled($pending)
+                                        class="flex cursor-pointer items-center rounded p-1 text-zinc-500 transition-colors duration-150 hover:bg-zinc-500/10 hover:text-zinc-900 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none disabled:cursor-default disabled:opacity-30 dark:hover:text-zinc-100"
+                                        title="Open {{ $project->name }}"
+                                        aria-label="Open {{ $project->name }}"
+                                        aria-haspopup="menu"
                                     >
                                         <x-icon name="external-link" class="size-3.5" />
+                                        <x-icon name="chevron-down" class="-mr-0.5 size-2.5 opacity-60" />
                                     </button>
+
+                                    <div
+                                        id="{{ $menuId }}"
+                                        popover
+                                        role="menu"
+                                        {{--
+                                            The UA stylesheet centres a popover with
+                                            `inset: 0; margin: auto`, which has to be undone
+                                            before the anchor can place it.
+                                        --}}
+                                        style="position-anchor: {{ $menuAnchor }}; position-area: bottom span-left; position-try-fallbacks: flip-block; inset: auto; margin: 4px 0 0 0; width: max-content;"
+                                        class="rounded-lg border border-zinc-200 bg-white p-1 text-sm text-zinc-900 shadow-lg dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                                    >
+                                        <button
+                                            type="button"
+                                            role="menuitem"
+                                            wire:click="openUrl(@js($project->name))"
+                                            popovertarget="{{ $menuId }}"
+                                            popovertargetaction="hide"
+                                            @disabled(blank($project->primaryUrl))
+                                            class="{{ $menuItemClasses }}"
+                                            title="{{ $project->primaryUrl }}"
+                                        >
+                                            <x-icon name="external-link" class="size-3.5 text-zinc-400" />
+                                            Open site
+                                        </button>
+
+                                        {{--
+                                            `ddev tableplus` is a host command: it reads the
+                                            project's published database port and hands
+                                            TablePlus a connection URL. It is not instant, so
+                                            it goes through the queue like every other ddev
+                                            call, and its row reports "Opening database".
+                                        --}}
+                                        <button
+                                            type="button"
+                                            role="menuitem"
+                                            wire:click="runOperation(@js($project->name), 'tableplus')"
+                                            popovertarget="{{ $menuId }}"
+                                            popovertargetaction="hide"
+                                            class="{{ $menuItemClasses }}"
+                                            title="Open the database in TablePlus (ddev tableplus)"
+                                        >
+                                            <x-icon name="database" class="size-3.5 text-zinc-400" />
+                                            Open database
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            role="menuitem"
+                                            wire:click="openMailpit(@js($project->name))"
+                                            popovertarget="{{ $menuId }}"
+                                            popovertargetaction="hide"
+                                            @disabled(blank($project->mailpitUrl))
+                                            class="{{ $menuItemClasses }}"
+                                            title="{{ $project->mailpitUrl ?? 'Mailpit is not available' }}"
+                                        >
+                                            <x-icon name="mail" class="size-3.5 text-zinc-400" />
+                                            Open mail
+                                        </button>
+                                    </div>
                                 @endif
 
                                 <button

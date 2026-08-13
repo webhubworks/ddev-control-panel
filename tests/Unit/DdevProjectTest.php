@@ -14,6 +14,8 @@ function listRow(array $overrides = []): array
         'docroot' => 'web',
         'httpsurl' => 'https://example.ddev.site',
         'httpurl' => 'http://example.ddev.site',
+        'mailpit_https_url' => 'https://example.ddev.site:8026',
+        'mailpit_url' => 'http://example.ddev.site:8025',
         'mutagen_enabled' => false,
         'name' => 'example',
         'primary_url' => 'https://example.ddev.site',
@@ -46,6 +48,25 @@ it('hides the url unless the project is running', function () {
     ]));
 
     expect($running->primaryUrl)->toBe('https://example.ddev.site');
+});
+
+it('carries the mailpit url so the popup never has to run ddev launch', function () {
+    expect(DdevProject::fromListRow(listRow())->mailpitUrl)->toBeNull();
+
+    $running = DdevProject::fromListRow(listRow([
+        'status' => 'running',
+        'status_desc' => 'running',
+    ]));
+
+    // https is what `ddev launch -m` prefers, so the popup opens the same one.
+    expect($running->mailpitUrl)->toBe('https://example.ddev.site:8026');
+});
+
+it('falls back to the plain mailpit url when the router serves no https', function () {
+    $row = listRow(['status' => 'running', 'status_desc' => 'running']);
+    unset($row['mailpit_https_url']);
+
+    expect(DdevProject::fromListRow($row)->mailpitUrl)->toBe('http://example.ddev.site:8025');
 });
 
 it('renders a healthy project as OK, the way ddev does', function () {

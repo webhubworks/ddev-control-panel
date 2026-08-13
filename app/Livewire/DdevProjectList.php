@@ -139,6 +139,22 @@ class DdevProjectList extends Component
         }
     }
 
+    /**
+     * The project's Mailpit inbox, which is what `ddev launch -m` opens.
+     *
+     * Opened straight from the snapshot rather than through ddev: `ddev list`
+     * already reports the URL, and shelling out would cost a second of ddev
+     * startup and a queue round trip to arrive at the same address.
+     */
+    public function openMailpit(string $projectName): void
+    {
+        $url = $this->project($projectName)?->mailpitUrl;
+
+        if (filled($url)) {
+            Shell::openExternal($url);
+        }
+    }
+
     public function revealInFinder(string $projectName): void
     {
         $project = $this->project($projectName);

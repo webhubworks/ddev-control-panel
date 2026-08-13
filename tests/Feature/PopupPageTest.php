@@ -63,6 +63,29 @@ it('opens with focus in the search field, not on an action button', function () 
         ->toContain('x-on:focus.window');
 });
 
+it('wires the open menu to a popover that actually exists', function () {
+    // A popovertarget that names no element renders a button which silently
+    // does nothing, and the dot in the project name is the way to break it:
+    // it is legal in a ddev name and illegal in a CSS ident, so the anchor
+    // cannot simply be the name.
+    app(DdevState::class)->putSnapshot([
+        ['name' => 'alpha.site', 'status' => 'running', 'status_desc' => 'running', 'type' => 'laravel', 'primary_url' => 'https://alpha.site.ddev.site', 'approot' => '/reps/alpha-site', 'shortroot' => '~/reps/alpha-site'],
+    ]);
+
+    $content = $this->get('/')->assertOk()->content();
+
+    preg_match('/popovertarget="([^"]+)"/', $content, $target);
+
+    expect($target)->not->toBeEmpty()
+        ->and($content)->toContain('id="'.$target[1].'"');
+
+    preg_match('/anchor-name: (--[^;"]+)/', $content, $anchor);
+
+    expect($anchor)->not->toBeEmpty()
+        ->and($anchor[1])->toMatch('/^--[\w-]+$/')
+        ->and($content)->toContain('position-anchor: '.$anchor[1]);
+});
+
 it('renders the icons as inline svg rather than emoji', function () {
     app(DdevState::class)->putSnapshot([
         ['name' => 'alpha-site', 'status' => 'stopped', 'status_desc' => 'stopped', 'type' => 'laravel', 'approot' => '/reps/alpha-site', 'shortroot' => '~/reps/alpha-site'],

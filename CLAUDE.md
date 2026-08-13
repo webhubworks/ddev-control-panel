@@ -152,6 +152,42 @@ unreachable from a project row. Its button is intentionally **never disabled**, 
 the snapshot says nothing is running: that count can be seconds stale, and this is the
 button someone reaches for precisely when ddev is in a state the list does not reflect.
 
+## The open menu, and why its three entries work three different ways
+
+The external-link button on a running row is a menu: **open site**, **open database**,
+**open mail**. They look alike and share nothing underneath.
+
+- **Open site** and **open mail** are `Shell::openExternal()` on a URL the snapshot already
+  holds. `ddev list --json-output` reports `mailpit_https_url` and `mailpit_url` alongside
+  `primary_url`, and `ddev launch -m` opens exactly the former, so shelling out would buy a
+  second of ddev startup and a queue round trip to arrive at the same address.
+- **Open database** has to run `ddev tableplus`, because the host database port is not in
+  `ddev list` (only in `ddev describe`, which is a second per project), and because the
+  command also picks the driver, finds TablePlus (including the Setapp copy) and builds the
+  connection URL. It goes through the queue like every other ddev call.
+
+`ddev tableplus` and `ddev launch` are **host commands, not subcommands**: shell scripts in
+`~/.ddev/commands/host/`. Two consequences:
+
+- They take **no project name** and ddev refuses to run them outside a project directory
+  ("Command 'tableplus' cannot be used outside the project directory"). They are scoped by
+  the cwd instead, which is why `DdevCli::run()` takes a working directory and
+  `DdevOperation::runsInProjectDirectory()` exists. `RunDdevOperationAction` resolves the
+  approot from the snapshot, never from the caller.
+- `ddev tableplus` only exists when TablePlus is installed (the script's `HostBinaryExists`
+  gate). Without it ddev answers `unknown command`, which surfaces as a failed operation on
+  the row. That is the whole handling; the menu entry is not hidden.
+
+`DdevOperation::changesProjectState()` keeps a launcher from triggering the five second
+`ddev list` that follows every real lifecycle command.
+
+The menu itself is a **native `popover` with CSS anchor positioning**, no JS. The project
+list is an `overflow-y-auto` container, so an ordinary absolutely positioned dropdown would
+be clipped; the top layer is not, and light dismiss plus Escape come for free. The anchor
+name is keyed by a hash of the project name because ddev allows dots in a name and a CSS
+ident does not. `PopupPageTest` renders a dotted name and asserts the `popovertarget` names
+an element that exists, since a mismatch renders a button that silently does nothing.
+
 ## The Electron project is ours, and composer will fight for it
 
 `nativephp/electron/` is committed. Composer's `post-update-cmd` runs

@@ -9,6 +9,7 @@ use App\Support\Ddev\DdevState;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
+use Native\Desktop\Facades\Shell;
 
 beforeEach(function () {
     Process::fake();
@@ -17,7 +18,7 @@ beforeEach(function () {
     $this->app->instance(DdevBinary::class, new DdevBinary('/usr/bin/true'));
 
     app(DdevState::class)->putSnapshot([
-        ['name' => 'zeta-shop', 'status' => 'running', 'status_desc' => 'running', 'type' => 'craftcms', 'primary_url' => 'https://zeta-shop.ddev.site', 'approot' => '/reps/zeta-shop', 'shortroot' => '~/reps/zeta-shop'],
+        ['name' => 'zeta-shop', 'status' => 'running', 'status_desc' => 'running', 'type' => 'craftcms', 'primary_url' => 'https://zeta-shop.ddev.site', 'mailpit_https_url' => 'https://zeta-shop.ddev.site:8026', 'approot' => '/reps/zeta-shop', 'shortroot' => '~/reps/zeta-shop'],
         ['name' => 'alpha-site', 'status' => 'stopped', 'status_desc' => 'stopped', 'type' => 'laravel', 'approot' => '/reps/alpha-site', 'shortroot' => '~/reps/alpha-site'],
         ['name' => 'beta-api', 'status' => 'unhealthy', 'status_desc' => 'db: stopped', 'type' => 'php', 'approot' => '/reps/beta-api', 'shortroot' => '~/reps/beta-api'],
     ]);
@@ -76,6 +77,42 @@ it('queues a start for a stopped project', function () {
 
     expect(app(DdevState::class)->operation('alpha-site')?->operation)
         ->toBe(DdevOperation::Start);
+});
+
+it('offers site, database and mail on a running project', function () {
+    Livewire::test(DdevProjectList::class)
+        ->set('runningOnly', true)
+        ->assertSee('Open site')
+        ->assertSee('Open database')
+        ->assertSee('Open mail');
+});
+
+it('opens the mailpit inbox straight from the snapshot', function () {
+    // `ddev list` already reported the URL, so this must not cost a ddev call.
+    Shell::shouldReceive('openExternal')
+        ->once()
+        ->with('https://zeta-shop.ddev.site:8026');
+
+    Livewire::test(DdevProjectList::class)->call('openMailpit', 'zeta-shop');
+
+    Process::assertNothingRan();
+});
+
+it('does nothing for a project that reports no mailpit url', function () {
+    Shell::shouldReceive('openExternal')->never();
+
+    Livewire::test(DdevProjectList::class)->call('openMailpit', 'alpha-site');
+});
+
+it('queues the tableplus host command to open the database', function () {
+    Livewire::test(DdevProjectList::class)
+        ->call('runOperation', 'zeta-shop', 'tableplus');
+
+    Queue::assertPushed(RunDdevOperationJob::class, 1);
+
+    // No confirmation step: opening a database viewer destroys nothing.
+    expect(app(DdevState::class)->operation('zeta-shop')?->operation)
+        ->toBe(DdevOperation::OpenDatabase);
 });
 
 it('requires a second click before deleting', function () {

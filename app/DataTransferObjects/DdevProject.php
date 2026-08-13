@@ -12,6 +12,7 @@ final readonly class DdevProject
         public string $statusDescription,
         public string $type,
         public ?string $primaryUrl,
+        public ?string $mailpitUrl,
         public string $appRoot,
         public string $shortRoot,
         public bool $mutagenEnabled,
@@ -34,6 +35,13 @@ final readonly class DdevProject
             type: (string) ($row['type'] ?? ''),
             // ddev only treats the URL as meaningful while the router is up.
             primaryUrl: $status->isRunning() ? ($row['primary_url'] ?? null) : null,
+            // What `ddev launch -m` opens. It is already in the list output, so
+            // the popup opens it directly rather than paying a second of ddev
+            // startup for a value it is holding. https when the router can
+            // serve it, which is how ddev picks between the two itself.
+            mailpitUrl: $status->isRunning()
+                ? ($row['mailpit_https_url'] ?? $row['mailpit_url'] ?? null)
+                : null,
             appRoot: (string) ($row['approot'] ?? ''),
             shortRoot: (string) ($row['shortroot'] ?? ''),
             mutagenEnabled: (bool) ($row['mutagen_enabled'] ?? false),

@@ -12,6 +12,7 @@ enum DdevOperation: string
     case Stop = 'stop';
     case Restart = 'restart';
     case Delete = 'delete';
+    case OpenDatabase = 'tableplus';
     case Poweroff = 'poweroff';
 
     public function label(): string
@@ -21,6 +22,7 @@ enum DdevOperation: string
             self::Stop => 'Stop',
             self::Restart => 'Restart',
             self::Delete => 'Delete',
+            self::OpenDatabase => 'Open database',
             self::Poweroff => 'Stop all',
         };
     }
@@ -35,6 +37,7 @@ enum DdevOperation: string
             self::Stop => 'Stopping',
             self::Restart => 'Restarting',
             self::Delete => 'Deleting',
+            self::OpenDatabase => 'Opening database',
             self::Poweroff => 'Stopping all projects',
         };
     }
@@ -46,6 +49,33 @@ enum DdevOperation: string
     public function isGlobal(): bool
     {
         return $this === self::Poweroff;
+    }
+
+    /**
+     * Scoped to a project by the working directory rather than by a project
+     * name on the command line.
+     *
+     * `ddev tableplus` is not a ddev subcommand: it is one of ddev's *host*
+     * commands, a shell script in `~/.ddev/commands/host/`. Those take no
+     * project argument and ddev refuses to run them outside a project
+     * directory ("Command 'tableplus' cannot be used outside the project
+     * directory"), so the approot has to be the cwd.
+     */
+    public function runsInProjectDirectory(): bool
+    {
+        return $this === self::OpenDatabase;
+    }
+
+    /**
+     * Whether the project is in a different state once this has run, and the
+     * cached `ddev list` snapshot is therefore stale.
+     *
+     * A launcher only hands a URL to another application, so following it with
+     * a five second `ddev list` would be pure waste.
+     */
+    public function changesProjectState(): bool
+    {
+        return $this !== self::OpenDatabase;
     }
 
     /**
@@ -63,6 +93,8 @@ enum DdevOperation: string
             self::Stop => ['stop', $projectName],
             self::Restart => ['restart', '--skip-confirmation', $projectName],
             self::Delete => ['delete', '--yes', $projectName],
+            // A host command: scoped by the cwd, and it rejects a project name.
+            self::OpenDatabase => ['tableplus'],
             // `ddev poweroff` takes no arguments at all: it stops every project
             // plus the router and ssh-agent.
             self::Poweroff => ['poweroff'],
@@ -80,6 +112,8 @@ enum DdevOperation: string
             self::Start, self::Restart => 900,
             self::Poweroff => 600,
             self::Stop, self::Delete => 300,
+            // Reads the project's config and hands a URL to `open`.
+            self::OpenDatabase => 60,
         };
     }
 

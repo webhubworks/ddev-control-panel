@@ -10,6 +10,7 @@ use App\Jobs\RunDdevOperationJob;
 use App\Support\Ddev\DdevBinary;
 use App\Support\Ddev\DdevCli;
 use App\Support\Ddev\DdevState;
+use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Queue;
 use Mockery\MockInterface;
@@ -76,6 +77,38 @@ it('records success and refreshes the project list afterwards', function () {
 
     // The status has changed, so the cached list must not be left stale.
     expect($this->state->snapshot()?->projects->first()?->name)->toBe('example');
+});
+
+it('runs a host command from the project directory and skips the re-scan', function () {
+    // `ddev tableplus` carries no project name: ddev finds the project from the
+    // directory it is run in, and refuses outright anywhere else.
+    $this->state->putSnapshot([
+        ['name' => 'example', 'status' => 'running', 'status_desc' => 'running', 'approot' => base_path()],
+    ]);
+
+    RunDdevOperationAction::run(new DdevOperationRequest('example', DdevOperation::OpenDatabase));
+
+    expect($this->state->operation('example')?->status)->toBe(DdevOperationStatus::Succeeded);
+
+    Process::assertRan(fn (PendingProcess $process): bool => $process->path === base_path()
+        && in_array('tableplus', (array) $process->command, strict: true));
+
+    // Opening the database changes nothing, so a five second `ddev list` after
+    // it would be pure waste.
+    Process::assertRanTimes(fn (): bool => true, 1);
+});
+
+it('fails a host command it has no directory for, rather than running it anywhere', function () {
+    $this->state->putSnapshot([
+        ['name' => 'example', 'status' => 'running', 'status_desc' => 'running', 'approot' => '/reps/gone'],
+    ]);
+
+    RunDdevOperationAction::run(new DdevOperationRequest('example', DdevOperation::OpenDatabase));
+
+    expect($this->state->operation('example')?->status)->toBe(DdevOperationStatus::Failed)
+        ->and($this->state->operation('example')?->message)->toContain('could not be found');
+
+    Process::assertNothingRan();
 });
 
 it('records the failure reason so the popup can show it', function () {
