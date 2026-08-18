@@ -181,6 +181,37 @@ The external-link button on a running row is a menu: **open site**, **open datab
 `DdevOperation::changesProjectState()` keeps a launcher from triggering the five second
 `ddev list` that follows every real lifecycle command.
 
+### A project can answer on more than one host, and `ddev list` will not say so
+
+`additional_hostnames` and `additional_fqdns` in a project's `.ddev` config give it extra
+hosts through the same router (mesh serves its timehub surface on `timehub-mesh.ddev.site`,
+because a DNS wildcard matches one label and `timehub.mesh.ddev.site` would need an
+`/etc/hosts` edit on every machine). **`ddev list --json-output` reports only
+`primary_url`.** The complete set is in `ddev describe`, which is a second per project and
+therefore unusable for a list of dozens.
+
+So `DdevProjectConfig` reads those two keys straight out of `.ddev/config.yaml` (plus every
+`config.*.yaml` beside it, merged in name order, with `override_config: true` replacing
+rather than appending, which is ddev's own rule). That happens in
+**`RefreshDdevProjectsAction`**, not in `DdevProject::fromListRow()`: a snapshot is
+rehydrated from cache on every poll, and reading config files that often would put file I/O
+back on the hot path we moved ddev off.
+
+`DdevProject::siteUrls()` then builds a URL per host, taking the scheme, TLD and port from
+`primary_url` rather than looking any of them up again. If the primary URL is not the
+project's own name under a TLD, the router is out of the picture (`router_disabled`
+publishes on 127.0.0.1) and the extra hostnames are dropped, since they would resolve to
+nothing; an additional FQDN is a complete host and is kept either way.
+
+The menu shows **"Open site"** only while there is one host. With more it lists each by
+host name, because "Open site" cannot say which site. `openUrl()` takes the URL back from
+the browser and opens it only if the snapshot itself lists it, falling back to the primary
+URL: it is an untrusted string on its way to `Shell::openExternal()`.
+
+This is the one place the popup reads a project's files rather than asking ddev. It costs a
+couple of small reads per project per refresh, next to a `ddev list` that already takes five
+seconds.
+
 The menu itself is a **native `popover` with CSS anchor positioning**, no JS. The project
 list is an `overflow-y-auto` container, so an ordinary absolutely positioned dropdown would
 be clipped; the top layer is not, and light dismiss plus Escape come for free. The anchor

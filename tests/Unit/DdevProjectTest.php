@@ -136,3 +136,78 @@ it('knows which lifecycle commands apply to a status', function () {
         ->and(DdevProjectStatus::ConfigMissing->canStop())->toBeFalse()
         ->and(DdevProjectStatus::ConfigMissing->canRestart())->toBeFalse();
 });
+
+it('offers only the primary url when the project has no additional hosts', function () {
+    $project = DdevProject::fromListRow(listRow(['status' => 'running', 'status_desc' => 'running']));
+
+    expect($project->siteUrls)->toBe(['example.ddev.site' => 'https://example.ddev.site']);
+});
+
+it('builds a url per additional hostname, under the project tld', function () {
+    // What mesh does: the timehub surface answers on its own host rather than
+    // on a path under mesh's, and `ddev list` reports neither of them.
+    $project = DdevProject::fromListRow(listRow([
+        'name' => 'mesh',
+        'status' => 'running',
+        'status_desc' => 'running',
+        'primary_url' => 'https://mesh.ddev.site',
+        'additional_hostnames' => ['timehub-mesh'],
+    ]));
+
+    expect($project->siteUrls)->toBe([
+        'mesh.ddev.site' => 'https://mesh.ddev.site',
+        'timehub-mesh.ddev.site' => 'https://timehub-mesh.ddev.site',
+    ]);
+});
+
+it('takes an additional fqdn as it stands', function () {
+    $project = DdevProject::fromListRow(listRow([
+        'status' => 'running',
+        'status_desc' => 'running',
+        'additional_fqdns' => ['example.test'],
+    ]));
+
+    expect($project->siteUrls)->toBe([
+        'example.ddev.site' => 'https://example.ddev.site',
+        'example.test' => 'https://example.test',
+    ]);
+});
+
+it('carries the primary scheme and port onto every extra host', function () {
+    $project = DdevProject::fromListRow(listRow([
+        'status' => 'running',
+        'status_desc' => 'running',
+        'primary_url' => 'http://example.ddev.site:8080',
+        'additional_hostnames' => ['admin'],
+        'additional_fqdns' => ['example.test'],
+    ]));
+
+    expect($project->siteUrls)->toBe([
+        'example.ddev.site:8080' => 'http://example.ddev.site:8080',
+        'admin.ddev.site:8080' => 'http://admin.ddev.site:8080',
+        'example.test:8080' => 'http://example.test:8080',
+    ]);
+});
+
+it('drops additional hostnames when the router is not in the picture', function () {
+    // With `router_disabled` ddev publishes ports on 127.0.0.1 and there is no
+    // tld for an extra label to hang off, so offering one would be a dead link.
+    $project = DdevProject::fromListRow(listRow([
+        'status' => 'running',
+        'status_desc' => 'running',
+        'primary_url' => 'https://127.0.0.1:55210',
+        'additional_hostnames' => ['timehub-mesh'],
+        'additional_fqdns' => ['example.test'],
+    ]));
+
+    expect($project->siteUrls)->toBe([
+        '127.0.0.1:55210' => 'https://127.0.0.1:55210',
+        'example.test:55210' => 'https://example.test:55210',
+    ]);
+});
+
+it('offers no url at all while the project is stopped', function () {
+    $project = DdevProject::fromListRow(listRow(['additional_hostnames' => ['timehub-mesh']]));
+
+    expect($project->siteUrls)->toBe([]);
+});

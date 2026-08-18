@@ -130,9 +130,26 @@ class DdevProjectList extends Component
         App::quit();
     }
 
-    public function openUrl(string $projectName): void
+    /**
+     * Open one of the project's hosts in the browser.
+     *
+     * A project answers on its primary URL plus whatever `additional_hostnames`
+     * and `additional_fqdns` its `.ddev` config adds, so the menu offers each
+     * of them and passes back which one was picked. That argument comes from
+     * the browser, so it is only ever opened when the snapshot itself lists it;
+     * without a match the primary URL is used.
+     */
+    public function openUrl(string $projectName, ?string $url = null): void
     {
-        $url = $this->project($projectName)?->primaryUrl;
+        $project = $this->project($projectName);
+
+        if ($project === null) {
+            return;
+        }
+
+        if ($url === null || ! in_array($url, $project->siteUrls, strict: true)) {
+            $url = $project->primaryUrl;
+        }
 
         if (filled($url)) {
             Shell::openExternal($url);

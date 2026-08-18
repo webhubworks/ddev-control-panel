@@ -15,7 +15,8 @@
         "laravel/framework": "^13.8",
         "laravel/tinker": "^3.0",
         "livewire/livewire": "^4.4",
-        "nativephp/desktop": "^2.2"
+        "nativephp/desktop": "^2.2",
+        "symfony/yaml": "*"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",

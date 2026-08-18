@@ -323,19 +323,45 @@
                                         style="position-anchor: {{ $menuAnchor }}; position-area: bottom span-left; position-try-fallbacks: flip-block; inset: auto; margin: 4px 0 0 0; width: max-content;"
                                         class="rounded-lg border border-zinc-200 bg-white p-1 text-sm text-zinc-900 shadow-lg dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
                                     >
-                                        <button
-                                            type="button"
-                                            role="menuitem"
-                                            wire:click="openUrl(@js($project->name))"
-                                            popovertarget="{{ $menuId }}"
-                                            popovertargetaction="hide"
-                                            @disabled(blank($project->primaryUrl))
-                                            class="{{ $menuItemClasses }}"
-                                            title="{{ $project->primaryUrl }}"
-                                        >
-                                            <x-icon name="external-link" class="size-3.5 text-zinc-400" />
-                                            Open site
-                                        </button>
+                                        @if (count($project->siteUrls) > 1)
+                                            {{--
+                                                A project with additional hostnames answers on
+                                                several hosts (mesh also serves timehub), and the
+                                                host is the only thing that tells them apart, so
+                                                each one becomes its own entry labelled by it
+                                                rather than a single "Open site".
+                                            --}}
+                                            @foreach ($project->siteUrls as $host => $url)
+                                                <button
+                                                    type="button"
+                                                    role="menuitem"
+                                                    wire:click="openUrl(@js($project->name), @js($url))"
+                                                    popovertarget="{{ $menuId }}"
+                                                    popovertargetaction="hide"
+                                                    class="{{ $menuItemClasses }}"
+                                                    title="{{ $url }}"
+                                                >
+                                                    <x-icon name="external-link" class="size-3.5 text-zinc-400" />
+                                                    {{ $host }}
+                                                </button>
+                                            @endforeach
+
+                                            <div class="my-1 h-px bg-zinc-200 dark:bg-zinc-700" role="separator"></div>
+                                        @else
+                                            <button
+                                                type="button"
+                                                role="menuitem"
+                                                wire:click="openUrl(@js($project->name))"
+                                                popovertarget="{{ $menuId }}"
+                                                popovertargetaction="hide"
+                                                @disabled(blank($project->primaryUrl))
+                                                class="{{ $menuItemClasses }}"
+                                                title="{{ $project->primaryUrl }}"
+                                            >
+                                                <x-icon name="external-link" class="size-3.5 text-zinc-400" />
+                                                Open site
+                                            </button>
+                                        @endif
 
                                         {{--
                                             `ddev tableplus` is a host command: it reads the

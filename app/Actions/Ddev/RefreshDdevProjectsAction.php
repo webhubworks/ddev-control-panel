@@ -5,6 +5,7 @@ namespace App\Actions\Ddev;
 use App\Exceptions\DdevBinaryNotFoundException;
 use App\Support\Ddev\DdevCli;
 use App\Support\Ddev\DdevCommandFailedException;
+use App\Support\Ddev\DdevProjectConfig;
 use App\Support\Ddev\DdevState;
 
 /**
@@ -22,7 +23,7 @@ final class RefreshDdevProjectsAction
         $state->markRefreshing();
 
         try {
-            $state->putSnapshot(app(DdevCli::class)->listProjects());
+            $state->putSnapshot(self::withAdditionalHosts(app(DdevCli::class)->listProjects()));
         } catch (DdevBinaryNotFoundException $exception) {
             $state->putSnapshot([], $exception->getMessage());
         } catch (DdevCommandFailedException $exception) {
@@ -31,5 +32,29 @@ final class RefreshDdevProjectsAction
         } finally {
             $state->clearRefreshing();
         }
+    }
+
+    /**
+     * Fold each project's extra hosts into its row, so the popup holds every
+     * URL a project answers on and never has to run `ddev describe` for them.
+     *
+     * This happens here rather than in the snapshot's own hydration because a
+     * snapshot is re-read from cache on every poll, and reading config files
+     * that often would put file I/O back on the hot path we moved ddev off.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, mixed>>
+     */
+    private static function withAdditionalHosts(array $rows): array
+    {
+        return array_map(function (array $row): array {
+            $config = DdevProjectConfig::read((string) ($row['approot'] ?? ''));
+
+            return [
+                ...$row,
+                'additional_hostnames' => $config->additionalHostnames,
+                'additional_fqdns' => $config->additionalFqdns,
+            ];
+        }, $rows);
     }
 }

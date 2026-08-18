@@ -12,6 +12,8 @@ final readonly class DdevProject
         public string $statusDescription,
         public string $type,
         public ?string $primaryUrl,
+        /** @var array<string, string> Host (with port, when non-standard) => URL, primary first. */
+        public array $siteUrls,
         public ?string $mailpitUrl,
         public string $appRoot,
         public string $shortRoot,
@@ -27,14 +29,26 @@ final readonly class DdevProject
     public static function fromListRow(array $row): self
     {
         $status = DdevProjectStatus::fromDdev($row['status'] ?? null);
+        $name = (string) ($row['name'] ?? '');
+
+        // ddev only treats the URL as meaningful while the router is up.
+        $primaryUrl = $status->isRunning() ? ($row['primary_url'] ?? null) : null;
 
         return new self(
-            name: (string) ($row['name'] ?? ''),
+            name: $name,
             status: $status,
             statusDescription: trim((string) ($row['status_desc'] ?? '')),
             type: (string) ($row['type'] ?? ''),
-            // ddev only treats the URL as meaningful while the router is up.
-            primaryUrl: $status->isRunning() ? ($row['primary_url'] ?? null) : null,
+            primaryUrl: $primaryUrl,
+            // A project can answer on more than one host: `additional_hostnames`
+            // and `additional_fqdns` in its `.ddev` config, which the refresh
+            // folds into the row because `ddev list` does not report them.
+            siteUrls: self::siteUrls(
+                $primaryUrl,
+                $name,
+                $row['additional_hostnames'] ?? [],
+                $row['additional_fqdns'] ?? [],
+            ),
             // What `ddev launch -m` opens. It is already in the list output, so
             // the popup opens it directly rather than paying a second of ddev
             // startup for a value it is holding. https when the router can
@@ -47,6 +61,52 @@ final readonly class DdevProject
             mutagenEnabled: (bool) ($row['mutagen_enabled'] ?? false),
             mutagenStatus: $row['mutagen_status'] ?? null,
         );
+    }
+
+    /**
+     * Every host the project answers on, keyed by the host as it should be
+     * labelled, with the primary URL first.
+     *
+     * ddev serves an additional hostname as one more label under the project's
+     * TLD, on the same scheme and port as the primary URL, so all of that is
+     * taken from `primary_url` rather than looked up a second time. When the
+     * primary URL is not the project's own host under a TLD, the router is out
+     * of the picture (`router_disabled` publishes ports on 127.0.0.1 instead)
+     * and the extra hostnames do not resolve to anything, so they are dropped.
+     * An additional FQDN is a complete host and is always kept.
+     *
+     * @param  list<string>|mixed  $hostnames
+     * @param  list<string>|mixed  $fqdns
+     * @return array<string, string>
+     */
+    private static function siteUrls(?string $primaryUrl, string $name, mixed $hostnames, mixed $fqdns): array
+    {
+        if (blank($primaryUrl)) {
+            return [];
+        }
+
+        $parts = parse_url($primaryUrl);
+        $scheme = $parts['scheme'] ?? 'https';
+        $host = $parts['host'] ?? '';
+        $port = isset($parts['port']) ? ':'.$parts['port'] : '';
+
+        $tld = str_starts_with($host, $name.'.') ? substr($host, strlen($name) + 1) : null;
+
+        $extraHosts = [
+            ...($tld === null ? [] : array_map(
+                fn (string $hostname): string => $hostname.'.'.$tld,
+                is_array($hostnames) ? $hostnames : [],
+            )),
+            ...(is_array($fqdns) ? $fqdns : []),
+        ];
+
+        $urls = [$host.$port => $primaryUrl];
+
+        foreach ($extraHosts as $extraHost) {
+            $urls[$extraHost.$port] ??= $scheme.'://'.$extraHost.$port;
+        }
+
+        return $urls;
     }
 
     /**

@@ -87,6 +87,60 @@ it('offers site, database and mail on a running project', function () {
         ->assertSee('Open mail');
 });
 
+/**
+ * A project whose `.ddev` config adds a second host. The extra hostname is
+ * folded into the row by the refresh, because `ddev list` does not report it.
+ */
+function snapshotWithAdditionalHostnames(): void
+{
+    app(DdevState::class)->putSnapshot([
+        ['name' => 'mesh', 'status' => 'running', 'status_desc' => 'running', 'type' => 'laravel', 'primary_url' => 'https://mesh.ddev.site', 'additional_hostnames' => ['timehub-mesh'], 'approot' => '/reps/mesh', 'shortroot' => '~/reps/mesh'],
+    ]);
+}
+
+it('names every host when a project answers on more than one', function () {
+    snapshotWithAdditionalHostnames();
+
+    // "Open site" cannot say which site, so a project with additional
+    // hostnames lists them by host instead.
+    Livewire::test(DdevProjectList::class)
+        ->assertSee('mesh.ddev.site')
+        ->assertSee('timehub-mesh.ddev.site')
+        ->assertDontSee('Open site');
+});
+
+it('opens the host that was picked, not just the primary one', function () {
+    snapshotWithAdditionalHostnames();
+
+    Shell::shouldReceive('openExternal')
+        ->once()
+        ->with('https://timehub-mesh.ddev.site');
+
+    Livewire::test(DdevProjectList::class)
+        ->call('openUrl', 'mesh', 'https://timehub-mesh.ddev.site');
+
+    Process::assertNothingRan();
+});
+
+it('falls back to the primary url rather than opening a url it does not know', function () {
+    // The url arrives from the browser and ends up at Shell::openExternal, so
+    // it is only ever opened when the snapshot itself lists it.
+    snapshotWithAdditionalHostnames();
+
+    Shell::shouldReceive('openExternal')
+        ->once()
+        ->with('https://mesh.ddev.site');
+
+    Livewire::test(DdevProjectList::class)
+        ->call('openUrl', 'mesh', 'https://example.com/phishing');
+});
+
+it('does nothing for a url on a project it has never heard of', function () {
+    Shell::shouldReceive('openExternal')->never();
+
+    Livewire::test(DdevProjectList::class)->call('openUrl', 'not-a-project', 'https://example.com');
+});
+
 it('opens the mailpit inbox straight from the snapshot', function () {
     // `ddev list` already reported the URL, so this must not cost a ddev call.
     Shell::shouldReceive('openExternal')
