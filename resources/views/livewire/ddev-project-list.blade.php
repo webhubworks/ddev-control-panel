@@ -36,8 +36,15 @@
         picks up a focus ring for no reason, and a stray Space or Enter fires it
         with delete one tab away. The search field is the harmless target, and
         the one actually worth typing into with this many projects.
+
+        **The focus is placed a frame late, and that is the whole of it working.**
+        Chromium assigns the window's own focus after the focus event has been
+        dispatched, so a focus() called straight from this handler is overwritten
+        by the very control it is there to keep the ring off - which is what the
+        first enabled header button wearing a blue ring on every open was. A
+        frame later there is nothing left to overwrite it.
     --}}
-    x-data="{ opened() { $wire.refreshProjects(true); $refs.search?.focus() } }"
+    x-data="{ opened() { $wire.refreshProjects(true); requestAnimationFrame(() => $refs.search?.focus()) } }"
     x-on:visibilitychange.document="if (! document.hidden) opened()"
     x-on:focus.window="opened()"
 >
