@@ -152,34 +152,48 @@ unreachable from a project row. Its button is intentionally **never disabled**, 
 the snapshot says nothing is running: that count can be seconds stale, and this is the
 button someone reaches for precisely when ddev is in a state the list does not reflect.
 
-## The open menu, and why its three entries work three different ways
+## The open menu, and why none of its entries run ddev
 
 The external-link button on a running row is a menu: **open site**, **open database**,
-**open mail**. They look alike and share nothing underneath.
+**open mail**. All three are `Shell::openExternal()` on a URL the snapshot already holds,
+inside the Livewire request itself, so they are instant.
 
-- **Open site** and **open mail** are `Shell::openExternal()` on a URL the snapshot already
-  holds. `ddev list --json-output` reports `mailpit_https_url` and `mailpit_url` alongside
-  `primary_url`, and `ddev launch -m` opens exactly the former, so shelling out would buy a
-  second of ddev startup and a queue round trip to arrive at the same address.
-- **Open database** has to run `ddev tableplus`, because the host database port is not in
-  `ddev list` (only in `ddev describe`, which is a second per project), and because the
-  command also picks the driver, finds TablePlus (including the Setapp copy) and builds the
-  connection URL. It goes through the queue like every other ddev call.
+`ddev list --json-output` gives two of those URLs directly: `primary_url`, and
+`mailpit_https_url` / `mailpit_url`, which is exactly what `ddev launch -m` opens. Shelling
+out would buy a second of ddev startup and a queue round trip to arrive at the same address.
 
-`ddev tableplus` and `ddev launch` are **host commands, not subcommands**: shell scripts in
-`~/.ddev/commands/host/`. Two consequences:
+The database URL is not in `ddev list`, and it used to be worth `ddev tableplus` for. It is
+not: that command is a **host command**, a shell script in `~/.ddev/commands/host/`, and
+running it cost the queue's sleep interval plus a second of ddev startup, so opening a
+database took seconds while opening a site was instant. Everything the script needs is
+either fixed or cheap:
 
-- They take **no project name** and ddev refuses to run them outside a project directory
-  ("Command 'tableplus' cannot be used outside the project directory"). They are scoped by
-  the cwd instead, which is why `DdevCli::run()` takes a working directory and
-  `DdevOperation::runsInProjectDirectory()` exists. `RunDdevOperationAction` resolves the
-  approot from the snapshot, never from the caller.
-- `ddev tableplus` only exists when TablePlus is installed (the script's `HostBinaryExists`
-  gate). Without it ddev answers `unknown command`, which surfaces as a failed operation on
-  the row. That is the whole handling; the menu entry is not hidden.
+- **Credentials are always `db`** (user, password, database), for every ddev project.
+- **The published host port** is not in `ddev list` and is a second per project in
+  `ddev describe`, but it is in `docker ps`, for every project at once, in about 70 ms. So
+  `DockerCli::databasePorts()` reads it there and `RefreshDdevProjectsAction` folds it into
+  each row, next to the extra hostnames and next to a `ddev list` that already spent seconds
+  inspecting the same containers.
+- **The driver** follows from the container port: 3306 is mysql (mariadb speaks the same
+  protocol, which is why ddev's own script makes the same two way choice), 5432 is postgres.
 
-`DdevOperation::changesProjectState()` keeps a launcher from triggering the five second
-`ddev list` that follows every real lifecycle command.
+`DdevProject::databaseUrl()` then builds ddev's URL verbatim, **including the misspelled
+`Enviroment=local` query key**, so this app and `ddev tableplus` address the same saved
+TablePlus connection rather than leaving two behind.
+
+Handing `mysql://` to `Shell::openExternal()` opens whichever client registered the scheme,
+the same way open site uses the default browser. TablePlus registers `mysql` and `postgres`
+(check with `plutil -extract CFBundleURLTypes json -o - /Applications/TablePlus.app/Contents/Info.plist`),
+so it is what opens on a machine that has it, and no Setapp path handling is needed.
+
+Only a **running** database container publishes a port, so a stopped project, or one with
+`omit_containers: [db]`, has no `databaseUrl` and the entry is disabled. That is better than
+what `ddev tableplus` gave: without TablePlus installed the script's `HostBinaryExists` gate
+made ddev answer `unknown command`, which surfaced as a failed operation on the row.
+
+The consequence for the queue is that **every operation left in `DdevOperation` changes
+project state**, so `RunDdevOperationAction` always follows one with a refresh, and nothing
+runs ddev outside the project-name form any more.
 
 ### A project can answer on more than one host, and `ddev list` will not say so
 

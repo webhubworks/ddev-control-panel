@@ -7,6 +7,7 @@ use App\Support\Ddev\DdevCli;
 use App\Support\Ddev\DdevCommandFailedException;
 use App\Support\Ddev\DdevProjectConfig;
 use App\Support\Ddev\DdevState;
+use App\Support\Docker\DockerCli;
 
 /**
  * Replaces the cached project snapshot with a fresh `ddev list`.
@@ -23,7 +24,7 @@ final class RefreshDdevProjectsAction
         $state->markRefreshing();
 
         try {
-            $state->putSnapshot(self::withAdditionalHosts(app(DdevCli::class)->listProjects()));
+            $state->putSnapshot(self::withLocalDetail(app(DdevCli::class)->listProjects()));
         } catch (DdevBinaryNotFoundException $exception) {
             $state->putSnapshot([], $exception->getMessage());
         } catch (DdevCommandFailedException $exception) {
@@ -35,8 +36,9 @@ final class RefreshDdevProjectsAction
     }
 
     /**
-     * Fold each project's extra hosts into its row, so the popup holds every
-     * URL a project answers on and never has to run `ddev describe` for them.
+     * Fold in the two things the popup needs and `ddev list` does not report:
+     * the extra hosts a project answers on, and its published database port.
+     * Both would otherwise mean `ddev describe`, at about a second per project.
      *
      * This happens here rather than in the snapshot's own hydration because a
      * snapshot is re-read from cache on every poll, and reading config files
@@ -45,15 +47,22 @@ final class RefreshDdevProjectsAction
      * @param  list<array<string, mixed>>  $rows
      * @return list<array<string, mixed>>
      */
-    private static function withAdditionalHosts(array $rows): array
+    private static function withLocalDetail(array $rows): array
     {
-        return array_map(function (array $row): array {
+        // One docker call for every project, next to a `ddev list` that has
+        // already spent seconds inspecting the same containers.
+        $databases = app(DockerCli::class)->databasePorts();
+
+        return array_map(function (array $row) use ($databases): array {
             $config = DdevProjectConfig::read((string) ($row['approot'] ?? ''));
+            $database = $databases[(string) ($row['name'] ?? '')] ?? null;
 
             return [
                 ...$row,
                 'additional_hostnames' => $config->additionalHostnames,
                 'additional_fqdns' => $config->additionalFqdns,
+                'database_host_port' => $database['host_port'] ?? null,
+                'database_container_port' => $database['container_port'] ?? null,
             ];
         }, $rows);
     }

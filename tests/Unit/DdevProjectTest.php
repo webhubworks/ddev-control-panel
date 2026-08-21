@@ -211,3 +211,35 @@ it('offers no url at all while the project is stopped', function () {
 
     expect($project->siteUrls)->toBe([]);
 });
+
+it('builds the same database url ddev tableplus would', function () {
+    // Reproduced from ~/.ddev/commands/host/tableplus, misspelled query key
+    // included: matching it means both routes address one saved connection.
+    $project = DdevProject::fromListRow(listRow([
+        'status' => 'running',
+        'status_desc' => 'running',
+        'database_host_port' => 55148,
+        'database_container_port' => 3306,
+    ]));
+
+    expect($project->databaseUrl)
+        ->toBe('mysql://db:db@127.0.0.1:55148/db?Enviroment=local&Name=ddev-example');
+});
+
+it('addresses a postgres project with the scheme its client expects', function () {
+    $project = DdevProject::fromListRow(listRow([
+        'status' => 'running',
+        'status_desc' => 'running',
+        'database_host_port' => 55149,
+        'database_container_port' => 5432,
+    ]));
+
+    expect($project->databaseUrl)
+        ->toBe('postgres://db:db@127.0.0.1:55149/db?Enviroment=local&Name=ddev-example');
+});
+
+it('has no database url when nothing published a port', function () {
+    // `ddev list` never reports a database, so a row without the port folded
+    // in is the ordinary case for a project whose containers are down.
+    expect(DdevProject::fromListRow(listRow())->databaseUrl)->toBeNull();
+});

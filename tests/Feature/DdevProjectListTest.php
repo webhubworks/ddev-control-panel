@@ -18,7 +18,7 @@ beforeEach(function () {
     $this->app->instance(DdevBinary::class, new DdevBinary('/usr/bin/true'));
 
     app(DdevState::class)->putSnapshot([
-        ['name' => 'zeta-shop', 'status' => 'running', 'status_desc' => 'running', 'type' => 'craftcms', 'primary_url' => 'https://zeta-shop.ddev.site', 'mailpit_https_url' => 'https://zeta-shop.ddev.site:8026', 'approot' => '/reps/zeta-shop', 'shortroot' => '~/reps/zeta-shop'],
+        ['name' => 'zeta-shop', 'status' => 'running', 'status_desc' => 'running', 'type' => 'craftcms', 'primary_url' => 'https://zeta-shop.ddev.site', 'mailpit_https_url' => 'https://zeta-shop.ddev.site:8026', 'database_host_port' => 55148, 'database_container_port' => 3306, 'approot' => '/reps/zeta-shop', 'shortroot' => '~/reps/zeta-shop'],
         ['name' => 'alpha-site', 'status' => 'stopped', 'status_desc' => 'stopped', 'type' => 'laravel', 'approot' => '/reps/alpha-site', 'shortroot' => '~/reps/alpha-site'],
         ['name' => 'beta-api', 'status' => 'unhealthy', 'status_desc' => 'db: stopped', 'type' => 'php', 'approot' => '/reps/beta-api', 'shortroot' => '~/reps/beta-api'],
     ]);
@@ -158,15 +158,24 @@ it('does nothing for a project that reports no mailpit url', function () {
     Livewire::test(DdevProjectList::class)->call('openMailpit', 'alpha-site');
 });
 
-it('queues the tableplus host command to open the database', function () {
-    Livewire::test(DdevProjectList::class)
-        ->call('runOperation', 'zeta-shop', 'tableplus');
+it('opens the database straight from the snapshot', function () {
+    // The URL `ddev tableplus` would build, from the published port the refresh
+    // already read off Docker. Running the command would cost a second of ddev
+    // startup and a queue round trip to arrive at the same address.
+    Shell::shouldReceive('openExternal')
+        ->once()
+        ->with('mysql://db:db@127.0.0.1:55148/db?Enviroment=local&Name=ddev-zeta-shop');
 
-    Queue::assertPushed(RunDdevOperationJob::class, 1);
+    Livewire::test(DdevProjectList::class)->call('openDatabase', 'zeta-shop');
 
-    // No confirmation step: opening a database viewer destroys nothing.
-    expect(app(DdevState::class)->operation('zeta-shop')?->operation)
-        ->toBe(DdevOperation::OpenDatabase);
+    Process::assertNothingRan();
+    Queue::assertNothingPushed();
+});
+
+it('does nothing for a project whose database container is not running', function () {
+    Shell::shouldReceive('openExternal')->never();
+
+    Livewire::test(DdevProjectList::class)->call('openDatabase', 'alpha-site');
 });
 
 it('requires a second click before deleting', function () {

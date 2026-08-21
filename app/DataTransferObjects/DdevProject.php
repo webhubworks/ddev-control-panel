@@ -15,6 +15,7 @@ final readonly class DdevProject
         /** @var array<string, string> Host (with port, when non-standard) => URL, primary first. */
         public array $siteUrls,
         public ?string $mailpitUrl,
+        public ?string $databaseUrl,
         public string $appRoot,
         public string $shortRoot,
         public bool $mutagenEnabled,
@@ -56,6 +57,13 @@ final readonly class DdevProject
             mailpitUrl: $status->isRunning()
                 ? ($row['mailpit_https_url'] ?? $row['mailpit_url'] ?? null)
                 : null,
+            // Built from the database container's published port, which the
+            // refresh reads off Docker because `ddev list` does not report it.
+            databaseUrl: self::databaseUrl(
+                $name,
+                $row['database_host_port'] ?? null,
+                $row['database_container_port'] ?? null,
+            ),
             appRoot: (string) ($row['approot'] ?? ''),
             shortRoot: (string) ($row['shortroot'] ?? ''),
             mutagenEnabled: (bool) ($row['mutagen_enabled'] ?? false),
@@ -107,6 +115,43 @@ final readonly class DdevProject
         }
 
         return $urls;
+    }
+
+    /**
+     * A connection URL for the project's database, for whichever client the
+     * machine opens `mysql://` and `postgres://` with (TablePlus registers
+     * both).
+     *
+     * This is the URL `ddev tableplus` builds, reproduced rather than run. The
+     * command is a host command and costs a second of ddev startup plus a queue
+     * round trip, while everything it needs is either fixed (ddev always
+     * creates the database, user and password as `db`) or already in the
+     * snapshot. The query string matches ddev's, misspelling included, so both
+     * routes address one saved connection instead of leaving two behind.
+     *
+     * Only a running database container has a published port, so a project that
+     * is stopped, or one configured without a database, has no URL at all.
+     */
+    private static function databaseUrl(string $name, mixed $hostPort, mixed $containerPort): ?string
+    {
+        $scheme = match ((int) $containerPort) {
+            // mariadb and mysql both speak the mysql protocol, which is why
+            // ddev's own command makes the same two way choice.
+            3306 => 'mysql',
+            5432 => 'postgres',
+            default => null,
+        };
+
+        if ($scheme === null || (int) $hostPort <= 0) {
+            return null;
+        }
+
+        return sprintf(
+            '%s://db:db@127.0.0.1:%d/db?Enviroment=local&Name=ddev-%s',
+            $scheme,
+            (int) $hostPort,
+            rawurlencode($name),
+        );
     }
 
     /**

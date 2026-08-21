@@ -364,20 +364,21 @@
                                         @endif
 
                                         {{--
-                                            `ddev tableplus` is a host command: it reads the
-                                            project's published database port and hands
-                                            TablePlus a connection URL. It is not instant, so
-                                            it goes through the queue like every other ddev
-                                            call, and its row reports "Opening database".
+                                            The connection URL `ddev tableplus` would build,
+                                            handed straight to the client that owns the
+                                            mysql:// scheme. Running the command instead would
+                                            cost a second of ddev startup and a queue round
+                                            trip to arrive at the same URL.
                                         --}}
                                         <button
                                             type="button"
                                             role="menuitem"
-                                            wire:click="runOperation(@js($project->name), 'tableplus')"
+                                            wire:click="openDatabase(@js($project->name))"
                                             popovertarget="{{ $menuId }}"
                                             popovertargetaction="hide"
+                                            @disabled(blank($project->databaseUrl))
                                             class="{{ $menuItemClasses }}"
-                                            title="Open the database in TablePlus (ddev tableplus)"
+                                            title="{{ blank($project->databaseUrl) ? 'The database container is not running' : 'Open the database in your database client' }}"
                                         >
                                             <x-icon name="database" class="size-3.5 text-zinc-400" />
                                             Open database

@@ -13,17 +13,14 @@ class DdevCli
     public function __construct(private readonly DdevBinary $binary) {}
 
     /**
-     * `$workingDirectory` is only for ddev's host commands, which are scoped by
-     * the directory they run in rather than by a project name.
-     *
      * @param  list<string>  $arguments
      */
-    public function run(array $arguments, int $timeout = 300, ?string $workingDirectory = null): DdevProcessResult
+    public function run(array $arguments, int $timeout = 300): DdevProcessResult
     {
         $result = Process::timeout($timeout)
             // ddev resolves its global config out of the home directory, and a
             // GUI-launched app may start in "/".
-            ->path($workingDirectory ?? (string) (getenv('HOME') ?: sys_get_temp_dir()))
+            ->path((string) (getenv('HOME') ?: sys_get_temp_dir()))
             ->env([
                 // Without this ddev can block forever on a confirmation prompt
                 // or a sudo password that no one is there to answer.

@@ -172,6 +172,23 @@ class DdevProjectList extends Component
         }
     }
 
+    /**
+     * The project's database, in whichever client the machine opens
+     * `mysql://` and `postgres://` with.
+     *
+     * `ddev tableplus` would do the same thing, but as a host command it costs
+     * a second of ddev startup plus a queue round trip, so the snapshot carries
+     * the connection URL instead and this opens it the way a site is opened.
+     */
+    public function openDatabase(string $projectName): void
+    {
+        $url = $this->project($projectName)?->databaseUrl;
+
+        if (filled($url)) {
+            Shell::openExternal($url);
+        }
+    }
+
     public function revealInFinder(string $projectName): void
     {
         $project = $this->project($projectName);

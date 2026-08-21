@@ -9,10 +9,9 @@ use RuntimeException;
 /**
  * Locates the `docker` executable.
  *
- * Only needed for the event stream: ddev talks to Docker itself for everything
- * else. The CLI is preferred over the engine socket because it already knows
- * how to find the daemon, which differs between Docker Desktop, OrbStack and
- * Colima and is not something this app should have to work out.
+ * The CLI is preferred over the engine socket because it already knows how to
+ * find the daemon, which differs between Docker Desktop, OrbStack and Colima
+ * and is not something this app should have to work out.
  */
 class DockerBinary extends BinaryLocator
 {

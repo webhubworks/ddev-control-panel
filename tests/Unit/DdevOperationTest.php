@@ -37,28 +37,8 @@ it('scopes every per-project command to a single project', function (DdevOperati
     expect($operation->arguments('example'))->toContain('example');
 })->with(array_filter(
     DdevOperation::cases(),
-    fn (DdevOperation $operation): bool => ! $operation->isGlobal() && ! $operation->runsInProjectDirectory(),
+    fn (DdevOperation $operation): bool => ! $operation->isGlobal(),
 ));
-
-it('scopes a host command by its working directory instead', function () {
-    // `ddev tableplus` is a script in ~/.ddev/commands/host/. It takes no
-    // project argument and ddev refuses to run it outside a project directory,
-    // so passing the name would only make it error.
-    expect(DdevOperation::OpenDatabase->arguments('example'))->toBe(['tableplus'])
-        ->and(DdevOperation::OpenDatabase->runsInProjectDirectory())->toBeTrue()
-        ->and(DdevOperation::OpenDatabase->isGlobal())->toBeFalse()
-        ->and(DdevOperation::OpenDatabase->isDestructive())->toBeFalse();
-});
-
-it('only re-scans ddev after a command that changed something', function () {
-    // A `ddev list` costs seconds, and opening the database changes nothing.
-    expect(DdevOperation::OpenDatabase->changesProjectState())->toBeFalse()
-        ->and(DdevOperation::Start->changesProjectState())->toBeTrue()
-        ->and(DdevOperation::Stop->changesProjectState())->toBeTrue()
-        ->and(DdevOperation::Restart->changesProjectState())->toBeTrue()
-        ->and(DdevOperation::Delete->changesProjectState())->toBeTrue()
-        ->and(DdevOperation::Poweroff->changesProjectState())->toBeTrue();
-});
 
 it('runs poweroff with no arguments at all', function () {
     // `ddev poweroff` takes no project and no flags; passing one would error.
