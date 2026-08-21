@@ -53,14 +53,29 @@ final readonly class DdevOperationState
     }
 
     /**
+     * Null for an entry this build can no longer read.
+     *
+     * The cache outlives the code: an operation that was in flight, or merely
+     * still on screen, when an app version dropped its enum case is still in
+     * there on the next start. Rehydrating it strictly would throw out of the
+     * component's first render, which is a 500 on the whole popup over a row
+     * that was about to expire anyway.
+     *
      * @param  array<string, mixed>  $payload
      */
-    public static function fromCache(array $payload): self
+    public static function fromCache(array $payload): ?self
     {
+        $operation = DdevOperation::tryFrom($payload['operation'] ?? '');
+        $status = DdevOperationStatus::tryFrom($payload['status'] ?? '');
+
+        if ($operation === null || $status === null || blank($payload['project_name'] ?? null)) {
+            return null;
+        }
+
         return new self(
             projectName: $payload['project_name'],
-            operation: DdevOperation::from($payload['operation']),
-            status: DdevOperationStatus::from($payload['status']),
+            operation: $operation,
+            status: $status,
             startedAt: CarbonImmutable::createFromTimestamp($payload['started_at']),
             finishedAt: isset($payload['finished_at'])
                 ? CarbonImmutable::createFromTimestamp($payload['finished_at'])

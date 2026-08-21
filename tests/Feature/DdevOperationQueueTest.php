@@ -3,6 +3,7 @@
 use App\Actions\Ddev\QueueDdevOperationAction;
 use App\Actions\Ddev\RunDdevOperationAction;
 use App\DataTransferObjects\DdevOperationRequest;
+use App\DataTransferObjects\DdevOperationState;
 use App\Enums\DdevOperation;
 use App\Enums\DdevOperationStatus;
 use App\Exceptions\DdevBinaryNotFoundException;
@@ -10,6 +11,7 @@ use App\Jobs\RunDdevOperationJob;
 use App\Support\Ddev\DdevBinary;
 use App\Support\Ddev\DdevCli;
 use App\Support\Ddev\DdevState;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Queue;
 use Mockery\MockInterface;
@@ -140,4 +142,26 @@ it('keeps a pending operation no matter how long it takes', function () {
     $this->travel(15)->minutes();
 
     expect($this->state->hasPendingOperations())->toBeTrue();
+});
+
+it('survives an operation left in the cache by an older build', function () {
+    // The cache outlives the code. A row for an operation this build no longer
+    // knows must not throw out of the popup's first render.
+    Cache::forever('ddev.operations', [
+        'example' => [
+            'project_name' => 'example',
+            'operation' => 'tableplus',
+            'status' => 'succeeded',
+            'started_at' => now()->getTimestamp(),
+        ],
+    ]);
+
+    expect($this->state->operations())->toBeEmpty()
+        ->and($this->state->operation('example'))->toBeNull();
+
+    // And it is gone from the cache for good, not written back with the next
+    // operation that touches it.
+    $this->state->putOperation(DdevOperationState::queued('other', DdevOperation::Start));
+
+    expect(Cache::get('ddev.operations'))->not->toHaveKey('example');
 });

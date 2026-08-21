@@ -69,7 +69,8 @@ class DdevState
     public function operations(): Collection
     {
         return collect($this->cache->get(self::OPERATIONS_KEY, []))
-            ->map(fn (array $payload): DdevOperationState => DdevOperationState::fromCache($payload))
+            ->map(fn (array $payload): ?DdevOperationState => DdevOperationState::fromCache($payload))
+            ->filter()
             ->reject(fn (DdevOperationState $state): bool => $state->isExpired(self::KEEP_SETTLED_SECONDS));
     }
 
@@ -112,7 +113,13 @@ class DdevState
         $lock = $this->cache->lock(self::OPERATIONS_KEY.'.lock', 10);
 
         $lock->block(5, function () use ($mutator): void {
-            $operations = $this->cache->get(self::OPERATIONS_KEY, []);
+            // Entries this build cannot read are dropped rather than carried
+            // forward, so a case removed from the enum leaves the cache for
+            // good instead of being written back on every operation.
+            $operations = array_filter(
+                $this->cache->get(self::OPERATIONS_KEY, []),
+                fn (mixed $payload): bool => is_array($payload) && DdevOperationState::fromCache($payload) !== null,
+            );
 
             $this->cache->forever(self::OPERATIONS_KEY, $mutator($operations));
         });

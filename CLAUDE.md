@@ -45,6 +45,13 @@ So no ddev command ever runs inside a request:
 `CACHE_STORE=file` and `SESSION_DRIVER=file` deliberately keep the hot path off SQLite,
 which the queue worker is writing to at the same time.
 
+**The operation cache outlives the code.** `ddev.operations` holds one entry per project,
+keyed by enum value, and a pending one is kept for as long as it takes. Remove a case from
+`DdevOperation` and the next start rehydrates an entry naming it, which used to throw out of
+the component's first render: a 500 on the whole popup, not a missing row. So
+`DdevOperationState::fromCache()` returns null for anything this build cannot read,
+`DdevState::operations()` drops those, and the next write prunes them from storage.
+
 ## Docker is the event source, because ddev has none
 
 Start a project in a terminal and this app has to find out somehow. ddev cannot tell it:
