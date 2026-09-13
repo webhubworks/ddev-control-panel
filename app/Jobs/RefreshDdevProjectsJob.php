@@ -17,7 +17,14 @@ class RefreshDdevProjectsJob implements ShouldBeUnique, ShouldQueue
 
     public int $tries = 1;
 
-    public int $timeout = 300;
+    /**
+     * `ddev list` is capped at 180 seconds by DdevCli, and this has to outlast
+     * it. The worker's own timeout must too (`nativephp.queue_workers`): in
+     * local it is the one that actually kills the job.
+     */
+    public const TIMEOUT = 300;
+
+    public int $timeout = self::TIMEOUT;
 
     public int $uniqueFor = 300;
 

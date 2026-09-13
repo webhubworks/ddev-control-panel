@@ -1,5 +1,7 @@
 <?php
 
+use App\Jobs\RefreshDdevProjectsJob;
+use App\Jobs\RunDdevOperationJob;
 use App\Providers\NativeAppServiceProvider;
 
 return [
@@ -152,11 +154,39 @@ return [
     /**
      * The queue workers that get auto-started on your application start.
      */
+    /*
+     * `timeout` here is a hard wall-clock cap on the job, and it beats the
+     * job's own $timeout. In local, NativePHP runs the worker as `queue:listen`
+     * rather than `queue:work`, and Laravel's listener sets this as the Symfony
+     * process timeout on the `queue:work --once` child it spawns per job. When
+     * it expires the child is killed, which takes the ddev command with it:
+     * `ddev start` dies at 60 seconds with no error of its own, the job is
+     * marked failed, and the project never comes up. So each worker's timeout
+     * has to cover the slowest thing its queue runs.
+     */
     'queue_workers' => [
+        /*
+         * `ddev list`, which DdevCli caps at 180 seconds of its own.
+         */
         'default' => [
             'queues' => ['default'],
             'memory_limit' => 128,
-            'timeout' => 60,
+            'timeout' => RefreshDdevProjectsJob::TIMEOUT,
+            'sleep' => 3,
+        ],
+
+        /*
+         * Lifecycle commands get a worker of their own, because they are the
+         * slow ones and one of them can block for good: a project whose
+         * post-start hook starts a dev server through `exec` rather than
+         * `web_extra_daemons` keeps `ddev start` attached to it forever. On a
+         * shared queue that stalls every `ddev list` refresh behind it, and
+         * the popup's whole list stops updating, not just the one row.
+         */
+        RunDdevOperationJob::QUEUE => [
+            'queues' => [RunDdevOperationJob::QUEUE],
+            'memory_limit' => 128,
+            'timeout' => RunDdevOperationJob::TIMEOUT,
             'sleep' => 3,
         ],
     ],
