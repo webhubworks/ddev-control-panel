@@ -2,6 +2,9 @@
 
 namespace App\Enums;
 
+use App\DataTransferObjects\DdevProject;
+use App\DataTransferObjects\DdevProjectSnapshot;
+
 /**
  * The ddev commands the popup can run. All but Poweroff act on a single
  * project; Poweroff stops everything at once.
@@ -66,6 +69,40 @@ enum DdevOperation: string
             // `ddev poweroff` takes no arguments at all: it stops every project
             // plus the router and ssh-agent.
             self::Poweroff => ['poweroff'],
+        };
+    }
+
+    /**
+     * Whether the snapshot shows the project already in the state this
+     * operation drives it to.
+     *
+     * The ddev process exiting is not the only proof an operation finished,
+     * and on some projects it never arrives: a `post-start` hook that starts a
+     * dev server through `exec` rather than `web_extra_daemons` keeps
+     * `ddev start` attached to it for good, long after the containers are up
+     * and healthy. So a refresh settles a pending operation whose target state
+     * the snapshot reports, and the project stops reading as "Starting" while
+     * it is serving.
+     *
+     * On its own this says nothing about whether the operation did anything:
+     * a restart ends where it began. `DdevOperationState::$observedDeparture`
+     * is what makes it conclusive.
+     */
+    public function isSatisfiedBy(DdevProjectSnapshot $snapshot, string $projectName): bool
+    {
+        $project = $snapshot->projects->first(
+            fn (DdevProject $project): bool => $project->name === $projectName
+        );
+
+        return match ($this) {
+            self::Start, self::Restart => $project?->status->isRunning() ?? false,
+            // ddev drops a deleted project from the list entirely, and a
+            // stopped one it cannot find is stopped as far as anyone can tell.
+            self::Stop => $project === null || $project->status === DdevProjectStatus::Stopped,
+            self::Delete => $project === null,
+            self::Poweroff => ! $snapshot->projects->contains(
+                fn (DdevProject $project): bool => $project->status->isRunning()
+            ),
         };
     }
 

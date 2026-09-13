@@ -1,5 +1,6 @@
 <?php
 
+use App\DataTransferObjects\DdevProjectSnapshot;
 use App\Enums\DdevOperation;
 
 /**
@@ -67,4 +68,46 @@ it('marks only delete as destructive', function () {
         ->and(DdevOperation::Stop->isDestructive())->toBeFalse()
         ->and(DdevOperation::Start->isDestructive())->toBeFalse()
         ->and(DdevOperation::Restart->isDestructive())->toBeFalse();
+});
+
+/**
+ * A snapshot of one project at the given status, plus a second project that is
+ * always running, so `poweroff` has something to be unsatisfied by.
+ */
+function snapshotOf(?string $status, bool $withRunningNeighbour = false): DdevProjectSnapshot
+{
+    return DdevProjectSnapshot::fromCache([
+        'rows' => array_values(array_filter([
+            $status === null ? null : ['name' => 'example', 'status' => $status, 'status_desc' => $status],
+            $withRunningNeighbour ? ['name' => 'other', 'status' => 'running', 'status_desc' => 'running'] : null,
+        ])),
+        'refreshed_at' => now()->getTimestamp(),
+    ]);
+}
+
+it('reads a running project as the target state of start and restart', function () {
+    expect(DdevOperation::Start->isSatisfiedBy(snapshotOf('running'), 'example'))->toBeTrue()
+        ->and(DdevOperation::Start->isSatisfiedBy(snapshotOf('stopped'), 'example'))->toBeFalse()
+        ->and(DdevOperation::Restart->isSatisfiedBy(snapshotOf('running'), 'example'))->toBeTrue()
+        // Half up is not up: ddev reports "starting" until the healthchecks pass.
+        ->and(DdevOperation::Start->isSatisfiedBy(snapshotOf('starting'), 'example'))->toBeFalse()
+        ->and(DdevOperation::Start->isSatisfiedBy(snapshotOf(null), 'example'))->toBeFalse();
+});
+
+it('reads a stopped or absent project as the target state of stop', function () {
+    expect(DdevOperation::Stop->isSatisfiedBy(snapshotOf('stopped'), 'example'))->toBeTrue()
+        ->and(DdevOperation::Stop->isSatisfiedBy(snapshotOf(null), 'example'))->toBeTrue()
+        ->and(DdevOperation::Stop->isSatisfiedBy(snapshotOf('running'), 'example'))->toBeFalse()
+        // Unhealthy is not stopped, and saying otherwise would hide it.
+        ->and(DdevOperation::Stop->isSatisfiedBy(snapshotOf('unhealthy'), 'example'))->toBeFalse();
+});
+
+it('reads a project gone from the list as the target state of delete', function () {
+    expect(DdevOperation::Delete->isSatisfiedBy(snapshotOf(null), 'example'))->toBeTrue()
+        ->and(DdevOperation::Delete->isSatisfiedBy(snapshotOf('stopped'), 'example'))->toBeFalse();
+});
+
+it('reads nothing running at all as the target state of poweroff', function () {
+    expect(DdevOperation::Poweroff->isSatisfiedBy(snapshotOf('stopped'), '*'))->toBeTrue()
+        ->and(DdevOperation::Poweroff->isSatisfiedBy(snapshotOf('stopped', withRunningNeighbour: true), '*'))->toBeFalse();
 });

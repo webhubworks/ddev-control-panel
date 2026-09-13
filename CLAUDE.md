@@ -42,6 +42,35 @@ So no ddev command ever runs inside a request:
 - The Livewire component only ever reads the cache. It polls slowly while open and faster
   while something is in flight (`isBusy()`), and a poll never costs more than a cache read.
 
+**The two have a worker each**, on separate queues (`default` and `operations`, in
+`nativephp.queue_workers`). A lifecycle command is slow and one of them can block for good
+(see the following section), and on a shared queue that puts every `ddev list` behind it: the
+whole list stops updating, not just the row that is waiting.
+
+### A worker's `timeout` beats the job's own, and killing it kills ddev
+
+`nativephp.queue_workers.<worker>.timeout` is a hard wall-clock cap on the job, not a default
+the job can raise. In local, NativePHP runs the worker as **`queue:listen`**, and Laravel's
+listener applies that number as the Symfony process timeout of the `queue:work --once` child
+it spawns per job. When it expires the child is killed, and the ddev command goes with it.
+
+Nothing about that reads as a timeout from the outside. `ddev start` dies partway through
+with no error of its own, the transcript simply stops, the job is marked failed for having
+been attempted too many times, and the project never comes up. It cost a `ddev start` that
+had to rebuild two images: upstream's default of 60 killed it at exactly one minute.
+
+So each worker's timeout has to cover the slowest thing on its queue, and both are pinned to
+the job constants (`RunDdevOperationJob::TIMEOUT`, `RefreshDdevProjectsJob::TIMEOUT`) rather
+than written out twice. `SettleDdevOperationsTest` asserts the relationship.
+
+`RunDdevOperationJob::failed()` is the safety net for a worker that dies anyway: nothing else
+settles that operation, and a pending one blocks a second command, so the project could not
+even be started again.
+
+Two things follow from `queue:listen` that are worth knowing: each job runs in a fresh
+process, so **the queue worker picks up PHP changes without restarting `native:run`**, and
+`--tries=1` means a killed job is failed rather than retried.
+
 `CACHE_STORE=file` and `SESSION_DRIVER=file` deliberately keep the hot path off SQLite,
 which the queue worker is writing to at the same time.
 
@@ -51,6 +80,79 @@ keyed by enum value, and a pending one is kept for as long as it takes. Remove a
 the component's first render: a 500 on the whole popup, not a missing row. So
 `DdevOperationState::fromCache()` returns null for anything this build cannot read,
 `DdevState::operations()` drops those, and the next write prunes them from storage.
+
+## A ddev command exiting is not the only proof an operation finished
+
+`ddev start` stays attached to its `post-start` hooks. A project that starts a dev server
+there with `exec` (`npm run serve`) rather than `web_extra_daemons` therefore **never
+finishes starting**, however healthy its containers are: the same thing happens in a
+terminal. Waiting only for the process would leave that project reading "Starting" until
+`DdevOperation::timeout()`, fifteen minutes after it came up and started serving.
+
+So a fresh `ddev list` settles what it can see. `DdevOperation::isSatisfiedBy()` says what
+each command's target state looks like in a snapshot, and `SettleDdevOperationsAction` runs
+over the pending operations after every successful refresh.
+
+Two things keep that honest:
+
+- **`DdevOperationState::$observedDeparture`.** A restart ends in the state it began in, so a
+  running project proves nothing until it has been seen going down. The flag is seeded at
+  queue time from the current snapshot (start, stop and delete are asked for precisely
+  because the project is *not* in the target state, so they carry it immediately) and set by
+  the first refresh that sees the project leave. Without it a restart settles on the first
+  poll, before ddev has touched anything.
+- **The process result is only written while the operation is still pending.** For a command
+  stuck on a hook it arrives as a timeout, minutes after the row correctly said the project
+  started, and by then the settled entry has expired out of the cache. Re-opening it would
+  pop a red error onto a project that is plainly running.
+
+The ordinary case is unchanged: the process exits first and its result is what lands.
+
+## Every ddev invocation is logged
+
+`storage/logs/ddev-<date>.log` (channel `ddev`, daily, 7 days) is the only record of what a
+command printed, since the row has space for one line of it. `DdevCommandLog` writes the
+command line, the output, the exit code and the duration.
+
+A lifecycle command is streamed: each line is logged **as it arrives**, because the run
+someone most needs to read is the one that never exits, and a transcript written after the
+process would never be written at all. The timestamp on the last line is what says where it
+stopped. `ddev list` is not streamed, because it prints a JSON blob on every refresh that
+would flush the interesting runs out of the file; it logs its command line, its duration, and
+its output only when it fails.
+
+Passing a `DdevTranscript` to `DdevCli::run()` is what makes a command streamed. There is no
+separate flag: recording a transcript and holding the output back until the process exits
+would defeat each other.
+
+### The popup tails the same lines, per project
+
+Every row has a logs button, enabled while a command is pending because that is exactly when
+it is worth opening, and **`runOperation()` opens the panel itself**: from the moment a
+lifecycle command is queued its output is the interesting thing on screen. The panel replaces
+the list with `$viewingLogsFor`'s transcript, newest last, and while it is open
+`pollInterval()` drops to the busy interval: polling is the whole of what makes it a tail.
+
+The empty state is suppressed while an operation is pending. A command that was queued a
+moment ago has printed nothing yet, and "nothing recorded" is the wrong thing to say about a
+project that is starting.
+
+`DdevTranscript` is a cache-backed ring buffer, one key per project, last 300 lines, kept a
+week. It is in the cache for the same reason the snapshot is: **a poll must never cost more
+than a cache read**, and parsing a day of mixed log file on every tick would. The log channel
+stays the durable, complete record, and the panel's folder button reveals it.
+
+Two things in there are load bearing:
+
+- **Lines are flushed in batches, not one per line.** A `post-start` hook that logs a request
+  per line would otherwise mean a cache write per line, for as long as it runs.
+- **The panel is `flex-col-reverse`**, which pins it to the newest line with no JS: the scroll
+  container starts at its own end, and arriving lines push the older ones up instead of moving
+  the viewport. Scrolling back to read still works, and stays put.
+
+When an operation is pending, the panel closes with a spinner and how long ago it started.
+That line is the answer to "is it hung": on a project stuck in a hook, the last real line is
+the hook's name and it stopped arriving minutes ago.
 
 ## Docker is the event source, because ddev has none
 
@@ -129,6 +231,9 @@ Not in the repo. NativePHP redirects storage to `app.getPath('userData')`:
 The snapshot and operation state are plain cache files under
 `<userData>/storage/framework/cache/data`, which is the fastest way to see what the app
 believes about ddev.
+
+`<userData>/storage/logs/ddev-<date>.log` is the ddev transcript described in the preceding
+section, and `laravel.log` beside it is everything else.
 
 ## ddev parity, and the one place we diverge
 

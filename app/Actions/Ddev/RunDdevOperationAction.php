@@ -24,7 +24,7 @@ final class RunDdevOperationAction
         $state = app(DdevState::class);
 
         $operation = $state->operation($request->projectName)
-            ?? DdevOperationState::queued($request->projectName, $request->operation);
+            ?? DdevOperationState::queued($request->projectName, $request->operation, $state->snapshot());
 
         $state->putOperation($operation->running());
 

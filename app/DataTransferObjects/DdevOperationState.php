@@ -18,15 +18,30 @@ final readonly class DdevOperationState
         public CarbonImmutable $startedAt,
         public ?CarbonImmutable $finishedAt = null,
         public ?string $message = null,
+        /**
+         * Whether the project has been seen away from the state this operation
+         * drives it to, which is what lets a later snapshot settle it.
+         *
+         * Restart is why this exists: it ends in the state it began in, so a
+         * snapshot showing the project running proves nothing until the
+         * project has been seen going down. Start, stop and delete are asked
+         * for precisely because the project is not in the target state, so
+         * they carry it from the moment they are queued.
+         */
+        public bool $observedDeparture = false,
     ) {}
 
-    public static function queued(string $projectName, DdevOperation $operation): self
-    {
+    public static function queued(
+        string $projectName,
+        DdevOperation $operation,
+        ?DdevProjectSnapshot $snapshot = null,
+    ): self {
         return new self(
             projectName: $projectName,
             operation: $operation,
             status: DdevOperationStatus::Queued,
             startedAt: CarbonImmutable::now(),
+            observedDeparture: $snapshot !== null && ! $operation->isSatisfiedBy($snapshot, $projectName),
         );
     }
 
@@ -37,6 +52,24 @@ final readonly class DdevOperationState
             operation: $this->operation,
             status: DdevOperationStatus::Running,
             startedAt: $this->startedAt,
+            observedDeparture: $this->observedDeparture,
+        );
+    }
+
+    /**
+     * Records that the project has been seen away from its target state, so
+     * the next snapshot reporting that state is proof the operation finished.
+     */
+    public function departed(): self
+    {
+        return new self(
+            projectName: $this->projectName,
+            operation: $this->operation,
+            status: $this->status,
+            startedAt: $this->startedAt,
+            finishedAt: $this->finishedAt,
+            message: $this->message,
+            observedDeparture: true,
         );
     }
 
@@ -49,6 +82,7 @@ final readonly class DdevOperationState
             startedAt: $this->startedAt,
             finishedAt: CarbonImmutable::now(),
             message: $message,
+            observedDeparture: $this->observedDeparture,
         );
     }
 
@@ -81,6 +115,7 @@ final readonly class DdevOperationState
                 ? CarbonImmutable::createFromTimestamp($payload['finished_at'])
                 : null,
             message: $payload['message'] ?? null,
+            observedDeparture: (bool) ($payload['observed_departure'] ?? false),
         );
     }
 
@@ -96,6 +131,7 @@ final readonly class DdevOperationState
             'started_at' => $this->startedAt->getTimestamp(),
             'finished_at' => $this->finishedAt?->getTimestamp(),
             'message' => $this->message,
+            'observed_departure' => $this->observedDeparture,
         ];
     }
 

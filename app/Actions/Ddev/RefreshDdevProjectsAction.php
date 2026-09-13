@@ -25,6 +25,15 @@ final class RefreshDdevProjectsAction
 
         try {
             $state->putSnapshot(self::withLocalDetail(app(DdevCli::class)->listProjects()));
+
+            // A fresh list is the other proof that an operation finished, and
+            // for a project whose post-start hook never returns it is the only
+            // one that arrives.
+            $snapshot = $state->snapshot();
+
+            if ($snapshot !== null) {
+                SettleDdevOperationsAction::settle($snapshot);
+            }
         } catch (DdevBinaryNotFoundException $exception) {
             $state->putSnapshot([], $exception->getMessage());
         } catch (DdevCommandFailedException $exception) {

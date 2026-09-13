@@ -27,7 +27,14 @@ final class QueueDdevOperationAction
             return $existing;
         }
 
-        $queued = DdevOperationState::queued($request->projectName, $request->operation);
+        // The snapshot seeds whether the project is already in the state this
+        // operation drives it to, which is what a later refresh needs to know
+        // before it can call the operation finished.
+        $queued = DdevOperationState::queued(
+            $request->projectName,
+            $request->operation,
+            $state->snapshot(),
+        );
 
         $state->putOperation($queued);
 
