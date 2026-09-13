@@ -1,0 +1,24 @@
+name: ddev-control-panel
+icon: web/assets/images/favicon/android-chrome-512x512.png
+processes:
+  'dev':
+    command: nvm use && composer native:dev
+    working_dir: null
+    auto_start: false
+    auto_restart: false
+    restart_when_changed: []
+    env: {}
+  'publish':
+    command: export GITHUB_TOKEN=$(gh auth token) && nvm use && npm run build && php artisan native:build mac arm64 --publish
+    working_dir: null
+    auto_start: false
+    auto_restart: false
+    restart_when_changed: []
+    env: {}
+  'migrate':
+    command: php artisan native:migrate
+    working_dir: null
+    auto_start: false
+    auto_restart: false
+    restart_when_changed: []
+    env: {}
