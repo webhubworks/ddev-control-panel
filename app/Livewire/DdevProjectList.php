@@ -7,9 +7,11 @@ use App\DataTransferObjects\DdevOperationRequest;
 use App\DataTransferObjects\DdevOperationState;
 use App\DataTransferObjects\DdevProject;
 use App\DataTransferObjects\DdevProjectSnapshot;
+use App\DataTransferObjects\DdevTranscriptLine;
 use App\Enums\DdevOperation;
 use App\Jobs\RefreshDdevProjectsJob;
 use App\Support\Ddev\DdevState;
+use App\Support\Ddev\DdevTranscript;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Computed;
@@ -32,6 +34,13 @@ class DdevProjectList extends Component
      * Poweroff stops every project on the machine, so it does too.
      */
     public bool $confirmingPowerOff = false;
+
+    /**
+     * The project whose ddev transcript is on screen, if any. The panel takes
+     * over the list rather than sitting beside it: at 440px there is no room
+     * for both, and a log is read a line at a time.
+     */
+    public ?string $viewingLogsFor = null;
 
     public function mount(): void
     {
@@ -78,6 +87,10 @@ class DdevProjectList extends Component
 
         QueueDdevOperationAction::queue(new DdevOperationRequest($projectName, $operation));
 
+        // From here the command's output is the interesting thing, and it is
+        // the only place a start that stalls says what it stalled on.
+        $this->viewingLogsFor = $projectName;
+
         unset($this->operations);
     }
 
@@ -108,6 +121,69 @@ class DdevProjectList extends Component
     public function cancelPowerOff(): void
     {
         $this->confirmingPowerOff = false;
+    }
+
+    /**
+     * Show what ddev printed for one project, most recent command last.
+     */
+    public function showLogs(string $projectName): void
+    {
+        // The name arrives from the browser and picks a cache key, so it is
+        // only ever one the snapshot itself lists.
+        if ($this->knowsProject($projectName)) {
+            $this->viewingLogsFor = $projectName;
+        }
+    }
+
+    public function hideLogs(): void
+    {
+        $this->viewingLogsFor = null;
+    }
+
+    /**
+     * Reveal the day's ddev log, which holds every project and a week of them.
+     *
+     * The panel shows one project's last few hundred lines; anything older, or
+     * from another project, is in the file.
+     */
+    public function revealLogFile(): void
+    {
+        // Not in the checkout: NativePHP points storage_path() at the user data
+        // directory whenever it is serving the app, in development too.
+        $path = storage_path('logs/ddev-'.now()->format('Y-m-d').'.log');
+
+        // Nothing has run today yet, so reveal the directory and its older days
+        // rather than doing nothing at all.
+        Shell::showInFolder(is_file($path) ? $path : storage_path('logs'));
+    }
+
+    /**
+     * The lines of the transcript on screen, oldest first.
+     *
+     * @return Collection<int, DdevTranscriptLine>
+     */
+    #[Computed(persist: false)]
+    public function transcript(): Collection
+    {
+        if ($this->viewingLogsFor === null) {
+            return collect();
+        }
+
+        return DdevTranscript::for($this->viewingLogsFor)->lines();
+    }
+
+    /**
+     * Milliseconds between polls.
+     *
+     * Fast while a command is in flight, and while a transcript is on screen,
+     * because polling is the whole of what makes the panel a tail. A poll is a
+     * cache read either way.
+     */
+    public function pollInterval(): int
+    {
+        return $this->isBusy() || $this->viewingLogsFor !== null
+            ? (int) config('ddev.poll_interval')
+            : (int) config('ddev.idle_poll_interval');
     }
 
     /**
@@ -257,10 +333,7 @@ class DdevProjectList extends Component
 
     public function render()
     {
-        return view('livewire.ddev-project-list', [
-            'pollInterval' => (int) config('ddev.poll_interval'),
-            'idlePollInterval' => (int) config('ddev.idle_poll_interval'),
-        ]);
+        return view('livewire.ddev-project-list');
     }
 
     /**

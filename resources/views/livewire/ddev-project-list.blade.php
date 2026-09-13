@@ -27,7 +27,7 @@
         watcher writes from outside the request. Livewire stops polling on its
         own once the window is hidden.
     --}}
-    wire:poll.{{ $busy ? $pollInterval : $idlePollInterval }}ms
+    wire:poll.{{ $this->pollInterval() }}ms
     {{--
         opened() runs every time the popup comes back to the front. The menubar
         window is hidden rather than destroyed, so it has to ask for fresh data
@@ -157,6 +157,92 @@
             @endif
         </div>
     @endif
+
+    @if ($this->viewingLogsFor !== null)
+        @php
+            $transcript = $this->transcript();
+            $running = $operations->get($this->viewingLogsFor);
+
+            $lineClasses = [
+                'command' => 'mt-2.5 border-t border-zinc-200 pt-2.5 font-semibold text-blue-600 first:mt-0 first:border-0 first:pt-0 dark:border-zinc-800 dark:text-blue-400',
+                'output' => 'text-zinc-600 dark:text-zinc-300',
+                'result' => 'text-emerald-600 dark:text-emerald-400',
+                'failure' => 'text-red-600 dark:text-red-400',
+            ];
+        @endphp
+
+        <div class="flex min-h-0 flex-1 flex-col" x-on:keydown.escape.window="$wire.hideLogs()">
+            <div class="flex items-center gap-2 border-b border-zinc-200 px-3 py-2 dark:border-zinc-800">
+                <button
+                    type="button"
+                    wire:click="hideLogs"
+                    class="cursor-pointer rounded p-1 text-zinc-500 transition-colors duration-150 hover:bg-zinc-500/10 hover:text-zinc-900 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none dark:hover:text-zinc-100"
+                    title="Back to the project list"
+                    aria-label="Back to the project list"
+                >
+                    <x-icon name="arrow-left" class="size-4" />
+                </button>
+
+                <div class="min-w-0 flex-1">
+                    <p class="truncate font-medium">{{ $this->viewingLogsFor }}</p>
+                    <p class="text-xs text-zinc-400 dark:text-zinc-500">What ddev printed, newest last</p>
+                </div>
+
+                <button
+                    type="button"
+                    wire:click="revealLogFile"
+                    class="cursor-pointer rounded p-1 text-zinc-500 transition-colors duration-150 hover:bg-zinc-500/10 hover:text-zinc-900 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none dark:hover:text-zinc-100"
+                    title="Reveal the full ddev log, which holds every project and a week of them"
+                    aria-label="Reveal the ddev log file in Finder"
+                >
+                    <x-icon name="folder" class="size-3.5" />
+                </button>
+            </div>
+
+            @if ($transcript->isEmpty() && ! $running?->isPending())
+                <div class="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
+                    <x-icon name="logs" class="size-6 text-zinc-300 dark:text-zinc-700" />
+                    <p class="text-zinc-500 dark:text-zinc-400">Nothing recorded for this project yet.</p>
+                    <p class="text-xs text-zinc-400 dark:text-zinc-500">
+                        Start, stop or restart it and the output appears here line by line, as ddev prints it.
+                    </p>
+                </div>
+            @else
+                {{--
+                    flex-col-reverse keeps the newest line in view with no JS at
+                    all: the scroll container starts at its own end, and lines
+                    arriving push the older ones up instead of moving the
+                    viewport. Scrolling back to read still works, and stays put.
+                --}}
+                <div class="flex flex-1 flex-col-reverse overflow-y-auto overscroll-contain px-3 py-2 font-mono text-[11px] leading-relaxed">
+                    <div>
+                        @foreach ($transcript as $line)
+                            <div class="flex gap-2 {{ $lineClasses[$line->kind->value] ?? $lineClasses['output'] }}">
+                                <span class="shrink-0 tabular-nums text-zinc-400 dark:text-zinc-600">{{ $line->at->format('H:i:s') }}</span>
+                                <span class="min-w-0 flex-1 break-words whitespace-pre-wrap">{{ $line->text }}</span>
+                            </div>
+                        @endforeach
+
+                        @if ($running?->isPending())
+                            {{--
+                                The whole point of the panel: a command still
+                                attached to a hook prints nothing more, so the
+                                last line and how long ago it arrived are what
+                                say where it stopped.
+                            --}}
+                            <div class="mt-1 flex items-center gap-2 text-blue-600 dark:text-blue-400">
+                                <x-icon name="spinner" class="size-3 motion-safe:animate-spin" />
+                                <span>
+                                    {{ $running->operation->activeLabel() }} for
+                                    {{ $running->startedAt->diffForHumans(syntax: \Carbon\CarbonInterface::DIFF_ABSOLUTE, short: true) }}
+                                </span>
+                            </div>
+                        @endif
+                    </div>
+                </div>
+            @endif
+        </div>
+    @else
 
     <div class="flex items-center gap-2 border-b border-zinc-200 px-3 py-2 dark:border-zinc-800">
         <label class="relative flex-1">
@@ -402,6 +488,16 @@
 
                                 <button
                                     type="button"
+                                    wire:click="showLogs(@js($project->name))"
+                                    class="cursor-pointer rounded p-1 text-zinc-500 transition-colors duration-150 hover:bg-zinc-500/10 hover:text-zinc-900 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none dark:hover:text-zinc-100"
+                                    title="Show what ddev printed for {{ $project->name }}"
+                                    aria-label="Show the ddev log for {{ $project->name }}"
+                                >
+                                    <x-icon name="logs" class="size-3.5" />
+                                </button>
+
+                                <button
+                                    type="button"
                                     wire:click="revealInFinder(@js($project->name))"
                                     @disabled($pending)
                                     class="cursor-pointer rounded p-1 text-zinc-500 transition-colors duration-150 hover:bg-zinc-500/10 hover:text-zinc-900 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none disabled:cursor-default disabled:opacity-30 dark:hover:text-zinc-100"
@@ -517,11 +613,18 @@
             </ul>
         @endif
     </div>
+    @endif
 
     <footer class="flex items-center justify-between gap-2 border-t border-zinc-200 px-3 py-1.5 text-xs text-zinc-400 dark:border-zinc-800 dark:text-zinc-500">
-        <span class="tabular-nums">
-            {{ $projects->count() }} {{ \Illuminate\Support\Str::plural('project', $projects->count()) }}
-        </span>
+        @if ($this->viewingLogsFor !== null)
+            <span class="tabular-nums">
+                {{ $this->transcript()->count() }} {{ \Illuminate\Support\Str::plural('line', $this->transcript()->count()) }}
+            </span>
+        @else
+            <span class="tabular-nums">
+                {{ $projects->count() }} {{ \Illuminate\Support\Str::plural('project', $projects->count()) }}
+            </span>
+        @endif
 
         @if ($busy)
             <span class="flex items-center gap-1">

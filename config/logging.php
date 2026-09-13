@@ -73,6 +73,20 @@ return [
             'replace_placeholders' => true,
         ],
 
+        /*
+         * A transcript of every ddev invocation: the command line, its output,
+         * its exit code, and how long it took. Separate from the application
+         * log because it is read on its own, to answer where a command is
+         * stuck or what a failed one printed.
+         */
+        'ddev' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/ddev.log'),
+            'level' => env('DDEV_LOG_LEVEL', 'debug'),
+            'days' => env('DDEV_LOG_DAYS', 7),
+            'replace_placeholders' => false,
+        ],
+
         'slack' => [
             'driver' => 'slack',
             'url' => env('LOG_SLACK_WEBHOOK_URL'),
