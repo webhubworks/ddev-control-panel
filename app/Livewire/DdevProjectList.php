@@ -87,10 +87,6 @@ class DdevProjectList extends Component
 
         QueueDdevOperationAction::queue(new DdevOperationRequest($projectName, $operation));
 
-        // From here the command's output is the interesting thing, and it is
-        // the only place a start that stalls says what it stalled on.
-        $this->viewingLogsFor = $projectName;
-
         unset($this->operations);
     }
 

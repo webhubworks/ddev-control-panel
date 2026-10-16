@@ -153,28 +153,20 @@ it('polls fast enough to read as a tail while the panel is open', function () {
     expect($component->instance()->pollInterval())->toBe((int) config('ddev.poll_interval'));
 });
 
-it('opens the log view when a command is run from a row', function () {
+it('leaves the list on screen when a command is run from a row', function () {
     Livewire::test(DdevProjectList::class)
         ->call('runOperation', 'alpha-site', 'start')
-        ->assertSet('viewingLogsFor', 'alpha-site')
+        ->assertSet('viewingLogsFor', null)
+        ->assertSee('Running only');
+});
+
+it('says a pending command is running rather than that nothing was recorded', function () {
+    app(DdevState::class)->putOperation(DdevOperationState::queued('alpha-site', DdevOperation::Start));
+
+    Livewire::test(DdevProjectList::class)
+        ->call('showLogs', 'alpha-site')
         // The command has printed nothing yet, and "nothing recorded" would be
         // the wrong thing to say about a project that is starting.
         ->assertDontSee('Nothing recorded for this project yet.')
         ->assertSee('Starting for');
-});
-
-it('opens the log view only once a delete is confirmed', function () {
-    Livewire::test(DdevProjectList::class)
-        ->call('runOperation', 'alpha-site', 'delete')
-        ->assertSet('confirmingDeleteFor', 'alpha-site')
-        // The first click asks the question, and the question is on the row.
-        ->assertSet('viewingLogsFor', null)
-        ->call('runOperation', 'alpha-site', 'delete')
-        ->assertSet('viewingLogsFor', 'alpha-site');
-});
-
-it('leaves the log view alone for a command it refuses to run', function () {
-    Livewire::test(DdevProjectList::class)
-        ->call('runOperation', 'alpha-site', 'poweroff')
-        ->assertSet('viewingLogsFor', null);
 });

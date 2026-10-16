@@ -128,10 +128,11 @@ would defeat each other.
 ### The popup tails the same lines, per project
 
 Every row has a logs button, enabled while a command is pending because that is exactly when
-it is worth opening, and **`runOperation()` opens the panel itself**: from the moment a
-lifecycle command is queued its output is the interesting thing on screen. The panel replaces
-the list with `$viewingLogsFor`'s transcript, newest last, and while it is open
-`pollInterval()` drops to the busy interval: polling is the whole of what makes it a tail.
+it is worth opening. **Running a command does not open the panel**: it took the list away
+from someone who only wanted to start a project and carry on, so opening it is left to the
+button. The panel replaces the list with `$viewingLogsFor`'s transcript, newest last, and
+while it is open `pollInterval()` drops to the busy interval: polling is the whole of what
+makes it a tail.
 
 The empty state is suppressed while an operation is pending. A command that was queued a
 moment ago has printed nothing yet, and "nothing recorded" is the wrong thing to say about a
