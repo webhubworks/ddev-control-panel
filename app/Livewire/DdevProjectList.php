@@ -12,15 +12,22 @@ use App\Enums\DdevOperation;
 use App\Jobs\RefreshDdevProjectsJob;
 use App\Support\Ddev\DdevState;
 use App\Support\Ddev\DdevTranscript;
+use App\Support\Editor\InstalledEditors;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\Locked;
 use Livewire\Component;
+use Native\Desktop\Dialog;
 use Native\Desktop\Facades\App;
+use Native\Desktop\Facades\Settings;
 use Native\Desktop\Facades\Shell;
 
 class DdevProjectList extends Component
 {
+    private const EDITOR_SETTING = 'editor';
+
     public string $search = '';
 
     public bool $runningOnly = false;
@@ -42,9 +49,34 @@ class DdevProjectList extends Component
      */
     public ?string $viewingLogsFor = null;
 
+    /**
+     * The settings panel takes over the list the same way the logs panel does.
+     */
+    public bool $showingSettings = false;
+
+    /**
+     * The app bundle projects are opened in. Locked because it ends up on a
+     * command line: only the server ever writes it.
+     */
+    #[Locked]
+    public ?string $editor = null;
+
+    /**
+     * The project that asked for an editor before one was chosen. Choosing
+     * opens it, so the first click is not wasted on a question.
+     */
+    #[Locked]
+    public ?string $openAfterChoosingEditor = null;
+
     public function mount(): void
     {
         $this->refreshProjects(onlyIfStale: true);
+
+        // Read once rather than per poll: it is a round trip to Electron, and
+        // nothing but this component ever changes it.
+        $editor = Settings::get(self::EDITOR_SETTING);
+
+        $this->editor = is_string($editor) ? $editor : null;
     }
 
     /**
@@ -127,6 +159,7 @@ class DdevProjectList extends Component
         // The name arrives from the browser and picks a cache key, so it is
         // only ever one the snapshot itself lists.
         if ($this->knowsProject($projectName)) {
+            $this->hideSettings();
             $this->viewingLogsFor = $projectName;
         }
     }
@@ -261,6 +294,116 @@ class DdevProjectList extends Component
         }
     }
 
+    /**
+     * Open the project's directory in the chosen editor, or ask for one first.
+     *
+     * `open -a` returns once LaunchServices has the request, so this stays
+     * inside the request the way opening a site does.
+     */
+    public function openInEditor(string $projectName): void
+    {
+        $project = $this->project($projectName);
+
+        if ($project === null || ! is_dir($project->appRoot)) {
+            return;
+        }
+
+        // Never chosen, or the app has been deleted since: either way the
+        // honest answer is to ask again.
+        if ($this->editorName() === null) {
+            $this->showSettings();
+            $this->openAfterChoosingEditor = $projectName;
+
+            return;
+        }
+
+        Process::run(['/usr/bin/open', '-a', $this->editor, $project->appRoot]);
+    }
+
+    public function showSettings(): void
+    {
+        $this->viewingLogsFor = null;
+        $this->showingSettings = true;
+    }
+
+    public function hideSettings(): void
+    {
+        $this->showingSettings = false;
+        $this->openAfterChoosingEditor = null;
+    }
+
+    /**
+     * Pick one of the detected editors. The path arrives from the browser and
+     * ends up on a command line, so it has to be one the server offered.
+     */
+    public function chooseEditor(string $path): void
+    {
+        if ($path !== $this->editor && ! array_key_exists($path, $this->installedEditors())) {
+            return;
+        }
+
+        $this->useEditor($path);
+    }
+
+    /**
+     * Pick any other app through the native file dialog, which treats an app
+     * bundle as a file rather than a folder to browse into.
+     */
+    public function chooseOtherEditor(): void
+    {
+        $path = Dialog::new()
+            ->title('Choose the app to open projects in')
+            ->defaultPath('/Applications')
+            ->button('Choose')
+            ->filter('Applications', ['app'])
+            ->open();
+
+        if (! is_string($path) || ! str_ends_with($path, '.app') || ! is_dir($path)) {
+            return;
+        }
+
+        $this->useEditor($path);
+    }
+
+    public function forgetEditor(): void
+    {
+        Settings::forget(self::EDITOR_SETTING);
+
+        $this->editor = null;
+    }
+
+    /**
+     * The chosen editor's display name, or null while there is none to use.
+     */
+    #[Computed(persist: false)]
+    public function editorName(): ?string
+    {
+        if (blank($this->editor) || ! is_dir($this->editor)) {
+            return null;
+        }
+
+        return InstalledEditors::nameOf($this->editor);
+    }
+
+    /**
+     * The detected editors, plus the chosen one when it came from the dialog,
+     * so the current choice is always on the list.
+     *
+     * @return array<string, string>
+     */
+    #[Computed(persist: false)]
+    public function installedEditors(): array
+    {
+        $editors = app(InstalledEditors::class)->all();
+        $editorName = $this->editorName();
+
+        if ($editorName !== null && ! array_key_exists($this->editor, $editors)) {
+            $editors[$this->editor] = $editorName;
+        }
+
+        return $editors;
+    }
+
     public function revealInFinder(string $projectName): void
     {
         $project = $this->project($projectName);
@@ -352,6 +495,20 @@ class DdevProjectList extends Component
     {
         return ($this->snapshot()?->projects ?? collect())
             ->first(fn (DdevProject $project): bool => $project->name === $projectName);
+    }
+
+    private function useEditor(string $path): void
+    {
+        Settings::set(self::EDITOR_SETTING, $path);
+
+        $this->editor = $path;
+
+        $projectName = $this->openAfterChoosingEditor;
+
+        if ($projectName !== null) {
+            $this->hideSettings();
+            $this->openInEditor($projectName);
+        }
     }
 
     private function knowsProject(string $projectName): bool

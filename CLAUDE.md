@@ -267,9 +267,11 @@ button someone reaches for precisely when ddev is in a state the list does not r
 
 ## The open menu, and why none of its entries run ddev
 
-The external-link button on a running row is a menu: **open site**, **open database**,
-**open mail**. All three are `Shell::openExternal()` on a URL the snapshot already holds,
-inside the Livewire request itself, so they are instant.
+The external-link button on every row is a menu: **open site**, **open database**,
+**open mail**, and **open in IDE**. The first three are `Shell::openExternal()` on a URL the
+snapshot already holds, inside the Livewire request itself, so they're instant. They're
+disabled unless the project is running and has no command pending; open in IDE isn't,
+because an editor doesn't need the containers.
 
 `ddev list --json-output` gives two of those URLs directly: `primary_url`, and
 `mailpit_https_url` / `mailpit_url`, which is exactly what `ddev launch -m` opens. Shelling
@@ -345,6 +347,35 @@ be clipped; the top layer is not, and light dismiss plus Escape come for free. T
 name is keyed by a hash of the project name because ddev allows dots in a name and a CSS
 ident does not. `PopupPageTest` renders a dotted name and asserts the `popovertarget` names
 an element that exists, since a mismatch renders a button that silently does nothing.
+
+### Open in IDE, and the settings panel it asks from
+
+`openInEditor()` runs `/usr/bin/open -a <app> <approot>` inside the request. `open` returns
+once LaunchServices has the request, so it costs no more than opening a site, and it's an
+absolute path because a Finder-launched app can't rely on `PATH`.
+
+The app is chosen once, for every project, and stored as its bundle path under the `editor`
+key of NativePHP's `Settings`. That's plain JSON in `userData`, which is fine for an app
+path and wrong for anything secret. `Settings::get()` is a round trip to Electron, so the
+component reads it once in `mount()` into a `#[Locked]` property: the path ends up on a
+command line, so the browser must never be able to write it, and a poll must not cost more
+than a cache read.
+
+Until an editor is chosen, or after the chosen app has been deleted, the entry reads
+**Open in IDE…** and opens the settings panel instead, remembering the project in
+`$openAfterChoosingEditor`. Choosing an editor there opens that project and closes the
+panel, so the first click still lands. The header's gear opens the same panel without a
+pending project, and choosing there stays on the panel.
+
+The panel lists what `InstalledEditors` finds in `/Applications`, `~/Applications` (where
+JetBrains Toolbox installs), and `/Applications/Setapp`, by bundle name from a fixed list,
+plus **Other app…**, which opens a native file dialog. `chooseEditor()` only accepts a path
+the server offered, or the one already chosen; the dialog's result never passes through the
+browser. Like the logs panel, the settings panel replaces the list rather than sitting
+beside it.
+
+`tests/Pest.php` stubs `Settings::get()` for every feature test, since Electron isn't
+running there; a test that cares mocks it itself.
 
 ## The Electron project is ours, and composer will fight for it
 

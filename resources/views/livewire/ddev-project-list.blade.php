@@ -3,6 +3,7 @@
     $projects = $this->projects();
     $operations = $this->operations();
     $busy = $this->isBusy();
+    $editorName = $this->editorName();
 
     $toneClasses = [
         'positive' => 'bg-emerald-500/10 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300',
@@ -93,6 +94,21 @@
 
             <button
                 type="button"
+                wire:click="{{ $this->showingSettings ? 'hideSettings' : 'showSettings' }}"
+                @class([
+                    'cursor-pointer rounded-md p-1.5 transition-colors duration-150 hover:bg-zinc-500/10 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none',
+                    'text-zinc-900 dark:text-zinc-100' => $this->showingSettings,
+                    'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100' => ! $this->showingSettings,
+                ])
+                title="Settings"
+                aria-label="Settings"
+                aria-pressed="{{ $this->showingSettings ? 'true' : 'false' }}"
+            >
+                <x-icon name="settings" />
+            </button>
+
+            <button
+                type="button"
                 wire:click="quit"
                 class="cursor-pointer rounded-md p-1.5 text-zinc-500 transition-colors duration-150 hover:bg-red-500/10 hover:text-red-600 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none dark:hover:text-red-400"
                 title="Quit DDEV Control Panel"
@@ -158,7 +174,91 @@
         </div>
     @endif
 
-    @if ($this->viewingLogsFor !== null)
+    @if ($this->showingSettings)
+        @php
+            $editorClasses = 'flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors duration-150 hover:bg-zinc-500/10 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none';
+        @endphp
+
+        <div class="flex min-h-0 flex-1 flex-col" x-on:keydown.escape.window="$wire.hideSettings()">
+            <div class="flex items-center gap-2 border-b border-zinc-200 px-3 py-2 dark:border-zinc-800">
+                <button
+                    type="button"
+                    wire:click="hideSettings"
+                    class="cursor-pointer rounded p-1 text-zinc-500 transition-colors duration-150 hover:bg-zinc-500/10 hover:text-zinc-900 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none dark:hover:text-zinc-100"
+                    title="Back to the project list"
+                    aria-label="Back to the project list"
+                >
+                    <x-icon name="arrow-left" class="size-4" />
+                </button>
+
+                <p class="min-w-0 flex-1 truncate font-medium">Settings</p>
+            </div>
+
+            <div class="flex-1 overflow-y-auto overscroll-contain px-3 py-3">
+                @if ($this->openAfterChoosingEditor !== null)
+                    <div class="mb-3 flex items-start gap-2 rounded-md bg-blue-500/10 px-2 py-1.5 text-xs text-blue-700 dark:text-blue-300" role="status">
+                        <x-icon name="code" class="mt-0.5 size-3.5" />
+                        <p class="min-w-0">
+                            Choose the app to open
+                            <span class="font-semibold">{{ $this->openAfterChoosingEditor }}</span>
+                            in. It is remembered for every project.
+                        </p>
+                    </div>
+                @endif
+
+                <section aria-labelledby="settings-editor">
+                    <div class="flex items-baseline justify-between gap-2">
+                        <h2 id="settings-editor" class="text-xs font-semibold tracking-wide text-zinc-500 uppercase dark:text-zinc-400">IDE</h2>
+
+                        @if ($editorName !== null)
+                            <button
+                                type="button"
+                                wire:click="forgetEditor"
+                                class="cursor-pointer text-xs font-medium text-zinc-500 hover:text-zinc-900 hover:underline dark:text-zinc-400 dark:hover:text-zinc-100"
+                            >
+                                Reset
+                            </button>
+                        @endif
+                    </div>
+
+                    <p class="mt-0.5 text-xs text-zinc-400 dark:text-zinc-500">Where <span class="font-medium">Open in IDE</span> opens a project's directory.</p>
+
+                    <div class="mt-2 space-y-0.5" role="radiogroup" aria-labelledby="settings-editor">
+                        @foreach ($this->installedEditors() as $path => $name)
+                            @php
+                                $selected = $path === $this->editor && $editorName !== null;
+                            @endphp
+
+                            <button
+                                type="button"
+                                role="radio"
+                                aria-checked="{{ $selected ? 'true' : 'false' }}"
+                                wire:click="chooseEditor(@js($path))"
+                                @class([$editorClasses, 'bg-blue-500/10 text-blue-700 dark:text-blue-300' => $selected])
+                                title="{{ $path }}"
+                            >
+                                <x-icon name="code" @class(['size-3.5', 'text-zinc-400' => ! $selected]) />
+                                <span class="min-w-0 flex-1 truncate">{{ $name }}</span>
+
+                                @if ($selected)
+                                    <x-icon name="check" class="size-3.5" />
+                                @endif
+                            </button>
+                        @endforeach
+
+                        <button
+                            type="button"
+                            wire:click="chooseOtherEditor"
+                            class="{{ $editorClasses }} text-zinc-600 dark:text-zinc-400"
+                        >
+                            <x-icon name="folder" class="size-3.5 text-zinc-400" />
+                            Other app&hellip;
+                        </button>
+                    </div>
+                </section>
+            </div>
+        </div>
+    @elseif ($this->viewingLogsFor !== null)
         @php
             $transcript = $this->transcript();
             $running = $operations->get($this->viewingLogsFor);
@@ -366,125 +466,148 @@
                                 hover, so they are discoverable and keyboard reachable.
                             --}}
                             <div class="flex items-center gap-0.5 opacity-70 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
-                                @if ($project->status->isRunning())
+                                {{--
+                                    A native popover, so the menu lives in the top layer
+                                    and is not clipped by the scrolling list, and so
+                                    light dismiss and Escape come for free. It is placed
+                                    by CSS anchor positioning, which follows the row as
+                                    the list scrolls without any JS.
+
+                                    Keyed by a hash of the project name: ddev allows
+                                    dots in a name and a CSS ident does not.
+
+                                    On every row, not only running ones: an editor does
+                                    not need the containers. The entries that do are
+                                    disabled until the project is up and settled.
+                                --}}
+                                @php
+                                    $menuId = 'open-menu-'.substr(md5($project->name), 0, 8);
+                                    $menuAnchor = '--anchor-'.substr(md5($project->name), 0, 8);
+                                    $menuItemClasses = 'flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left transition-colors duration-150 hover:bg-zinc-500/10 focus-visible:bg-zinc-500/10 focus-visible:outline-none disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent';
+                                    $servesSite = $project->status->isRunning() && ! $pending;
+                                @endphp
+
+                                <button
+                                    type="button"
+                                    popovertarget="{{ $menuId }}"
+                                    style="anchor-name: {{ $menuAnchor }}"
+                                    class="flex cursor-pointer items-center rounded p-1 text-zinc-500 transition-colors duration-150 hover:bg-zinc-500/10 hover:text-zinc-900 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none disabled:cursor-default disabled:opacity-30 dark:hover:text-zinc-100"
+                                    title="Open {{ $project->name }}"
+                                    aria-label="Open {{ $project->name }}"
+                                    aria-haspopup="menu"
+                                >
+                                    <x-icon name="external-link" class="size-3.5" />
+                                    <x-icon name="chevron-down" class="-mr-0.5 size-2.5 opacity-60" />
+                                </button>
+
+                                <div
+                                    id="{{ $menuId }}"
+                                    popover
+                                    role="menu"
                                     {{--
-                                        A native popover, so the menu lives in the top layer
-                                        and is not clipped by the scrolling list, and so
-                                        light dismiss and Escape come for free. It is placed
-                                        by CSS anchor positioning, which follows the row as
-                                        the list scrolls without any JS.
-
-                                        Keyed by a hash of the project name: ddev allows
-                                        dots in a name and a CSS ident does not.
+                                        The UA stylesheet centres a popover with
+                                        `inset: 0; margin: auto`, which has to be undone
+                                        before the anchor can place it.
                                     --}}
-                                    @php
-                                        $menuId = 'open-menu-'.substr(md5($project->name), 0, 8);
-                                        $menuAnchor = '--anchor-'.substr(md5($project->name), 0, 8);
-                                        $menuItemClasses = 'flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left transition-colors duration-150 hover:bg-zinc-500/10 focus-visible:bg-zinc-500/10 focus-visible:outline-none disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent';
-                                    @endphp
-
-                                    <button
-                                        type="button"
-                                        popovertarget="{{ $menuId }}"
-                                        style="anchor-name: {{ $menuAnchor }}"
-                                        @disabled($pending)
-                                        class="flex cursor-pointer items-center rounded p-1 text-zinc-500 transition-colors duration-150 hover:bg-zinc-500/10 hover:text-zinc-900 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none disabled:cursor-default disabled:opacity-30 dark:hover:text-zinc-100"
-                                        title="Open {{ $project->name }}"
-                                        aria-label="Open {{ $project->name }}"
-                                        aria-haspopup="menu"
-                                    >
-                                        <x-icon name="external-link" class="size-3.5" />
-                                        <x-icon name="chevron-down" class="-mr-0.5 size-2.5 opacity-60" />
-                                    </button>
-
-                                    <div
-                                        id="{{ $menuId }}"
-                                        popover
-                                        role="menu"
+                                    style="position-anchor: {{ $menuAnchor }}; position-area: bottom span-left; position-try-fallbacks: flip-block; inset: auto; margin: 4px 0 0 0; width: max-content;"
+                                    class="rounded-lg border border-zinc-200 bg-white p-1 text-sm text-zinc-900 shadow-lg dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                                >
+                                    @if (count($project->siteUrls) > 1)
                                         {{--
-                                            The UA stylesheet centres a popover with
-                                            `inset: 0; margin: auto`, which has to be undone
-                                            before the anchor can place it.
+                                            A project with additional hostnames answers on
+                                            several hosts (mesh also serves timehub), and the
+                                            host is the only thing that tells them apart, so
+                                            each one becomes its own entry labelled by it
+                                            rather than a single "Open site".
                                         --}}
-                                        style="position-anchor: {{ $menuAnchor }}; position-area: bottom span-left; position-try-fallbacks: flip-block; inset: auto; margin: 4px 0 0 0; width: max-content;"
-                                        class="rounded-lg border border-zinc-200 bg-white p-1 text-sm text-zinc-900 shadow-lg dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-                                    >
-                                        @if (count($project->siteUrls) > 1)
-                                            {{--
-                                                A project with additional hostnames answers on
-                                                several hosts (mesh also serves timehub), and the
-                                                host is the only thing that tells them apart, so
-                                                each one becomes its own entry labelled by it
-                                                rather than a single "Open site".
-                                            --}}
-                                            @foreach ($project->siteUrls as $host => $url)
-                                                <button
-                                                    type="button"
-                                                    role="menuitem"
-                                                    wire:click="openUrl(@js($project->name), @js($url))"
-                                                    popovertarget="{{ $menuId }}"
-                                                    popovertargetaction="hide"
-                                                    class="{{ $menuItemClasses }}"
-                                                    title="{{ $url }}"
-                                                >
-                                                    <x-icon name="external-link" class="size-3.5 text-zinc-400" />
-                                                    {{ $host }}
-                                                </button>
-                                            @endforeach
-
-                                            <div class="my-1 h-px bg-zinc-200 dark:bg-zinc-700" role="separator"></div>
-                                        @else
+                                        @foreach ($project->siteUrls as $host => $url)
                                             <button
                                                 type="button"
                                                 role="menuitem"
-                                                wire:click="openUrl(@js($project->name))"
+                                                wire:click="openUrl(@js($project->name), @js($url))"
                                                 popovertarget="{{ $menuId }}"
                                                 popovertargetaction="hide"
-                                                @disabled(blank($project->primaryUrl))
+                                                @disabled(! $servesSite)
                                                 class="{{ $menuItemClasses }}"
-                                                title="{{ $project->primaryUrl }}"
+                                                title="{{ $url }}"
                                             >
                                                 <x-icon name="external-link" class="size-3.5 text-zinc-400" />
-                                                Open site
+                                                {{ $host }}
                                             </button>
-                                        @endif
+                                        @endforeach
 
-                                        {{--
-                                            The connection URL `ddev tableplus` would build,
-                                            handed straight to the client that owns the
-                                            mysql:// scheme. Running the command instead would
-                                            cost a second of ddev startup and a queue round
-                                            trip to arrive at the same URL.
-                                        --}}
+                                        <div class="my-1 h-px bg-zinc-200 dark:bg-zinc-700" role="separator"></div>
+                                    @else
                                         <button
                                             type="button"
                                             role="menuitem"
-                                            wire:click="openDatabase(@js($project->name))"
+                                            wire:click="openUrl(@js($project->name))"
                                             popovertarget="{{ $menuId }}"
                                             popovertargetaction="hide"
-                                            @disabled(blank($project->databaseUrl))
+                                            @disabled(! $servesSite || blank($project->primaryUrl))
                                             class="{{ $menuItemClasses }}"
-                                            title="{{ blank($project->databaseUrl) ? 'The database container is not running' : 'Open the database in your database client' }}"
+                                            title="{{ $project->primaryUrl }}"
                                         >
-                                            <x-icon name="database" class="size-3.5 text-zinc-400" />
-                                            Open database
+                                            <x-icon name="external-link" class="size-3.5 text-zinc-400" />
+                                            Open site
                                         </button>
+                                    @endif
 
-                                        <button
-                                            type="button"
-                                            role="menuitem"
-                                            wire:click="openMailpit(@js($project->name))"
-                                            popovertarget="{{ $menuId }}"
-                                            popovertargetaction="hide"
-                                            @disabled(blank($project->mailpitUrl))
-                                            class="{{ $menuItemClasses }}"
-                                            title="{{ $project->mailpitUrl ?? 'Mailpit is not available' }}"
-                                        >
-                                            <x-icon name="mail" class="size-3.5 text-zinc-400" />
-                                            Open mail
-                                        </button>
-                                    </div>
-                                @endif
+                                    {{--
+                                        The connection URL `ddev tableplus` would build,
+                                        handed straight to the client that owns the
+                                        mysql:// scheme. Running the command instead would
+                                        cost a second of ddev startup and a queue round
+                                        trip to arrive at the same URL.
+                                    --}}
+                                    <button
+                                        type="button"
+                                        role="menuitem"
+                                        wire:click="openDatabase(@js($project->name))"
+                                        popovertarget="{{ $menuId }}"
+                                        popovertargetaction="hide"
+                                        @disabled(! $servesSite || blank($project->databaseUrl))
+                                        class="{{ $menuItemClasses }}"
+                                        title="{{ blank($project->databaseUrl) ? 'The database container is not running' : 'Open the database in your database client' }}"
+                                    >
+                                        <x-icon name="database" class="size-3.5 text-zinc-400" />
+                                        Open database
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        role="menuitem"
+                                        wire:click="openMailpit(@js($project->name))"
+                                        popovertarget="{{ $menuId }}"
+                                        popovertargetaction="hide"
+                                        @disabled(! $servesSite || blank($project->mailpitUrl))
+                                        class="{{ $menuItemClasses }}"
+                                        title="{{ $project->mailpitUrl ?? 'Mailpit is not available' }}"
+                                    >
+                                        <x-icon name="mail" class="size-3.5 text-zinc-400" />
+                                        Open mail
+                                    </button>
+
+                                    <div class="my-1 h-px bg-zinc-200 dark:bg-zinc-700" role="separator"></div>
+
+                                    {{--
+                                        Until an editor is chosen this opens the
+                                        settings panel to ask, and choosing there opens
+                                        the project, so the first click still lands.
+                                    --}}
+                                    <button
+                                        type="button"
+                                        role="menuitem"
+                                        wire:click="openInEditor(@js($project->name))"
+                                        popovertarget="{{ $menuId }}"
+                                        popovertargetaction="hide"
+                                        class="{{ $menuItemClasses }}"
+                                        title="{{ $project->shortRoot }}"
+                                    >
+                                        <x-icon name="code" class="size-3.5 text-zinc-400" />
+                                        {{ $editorName === null ? 'Open in IDE…' : 'Open in '.$editorName }}
+                                    </button>
+                                </div>
 
                                 <button
                                     type="button"
