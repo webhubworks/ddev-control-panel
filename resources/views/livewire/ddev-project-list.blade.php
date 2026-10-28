@@ -106,16 +106,6 @@
             >
                 <x-icon name="settings" />
             </button>
-
-            <button
-                type="button"
-                wire:click="quit"
-                class="cursor-pointer rounded-md p-1.5 text-zinc-500 transition-colors duration-150 hover:bg-red-500/10 hover:text-red-600 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none dark:hover:text-red-400"
-                title="Quit DDEV Control Panel"
-                aria-label="Quit DDEV Control Panel"
-            >
-                <x-icon name="logout" />
-            </button>
         </div>
     </header>
 

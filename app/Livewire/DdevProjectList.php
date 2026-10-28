@@ -20,7 +20,6 @@ use Livewire\Attributes\Computed;
 use Livewire\Attributes\Locked;
 use Livewire\Component;
 use Native\Desktop\Dialog;
-use Native\Desktop\Facades\App;
 use Native\Desktop\Facades\Settings;
 use Native\Desktop\Facades\Shell;
 
@@ -228,11 +227,6 @@ class DdevProjectList extends Component
     {
         $this->search = '';
         $this->runningOnly = false;
-    }
-
-    public function quit(): void
-    {
-        App::quit();
     }
 
     /**

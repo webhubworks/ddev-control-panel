@@ -108,12 +108,6 @@
             <path d="M18.4 6.6a9 9 0 1 1-12.77.04" />
             @break
 
-        @case('logout')
-            <path d="m16 17 5-5-5-5" />
-            <path d="M21 12H9" />
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-            @break
-
         @case('check')
             <path d="M20 6 9 17l-5-5" />
             @break
