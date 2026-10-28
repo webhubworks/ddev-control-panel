@@ -236,6 +236,51 @@ believes about ddev.
 `<userData>/storage/logs/ddev-<date>.log` is the ddev transcript described in the preceding
 section, and `laravel.log` beside it is everything else.
 
+### Every dev start copies the repo's `storage/` over it, compiled views included
+
+In development, the Electron plugin's `ensureAppFoldersAreAvailable()`
+(`nativephp/electron/electron-plugin/src/server/php.ts`) runs `copySync` from the repo's
+`storage/` into `<userData>/storage` on **every** start, not only the first. The copy stamps
+each file with the current time.
+
+That breaks Blade's freshness check, which treats a compiled view as current when it's newer
+than its source. A compiled view left in the repo's `storage/framework/views` by anything run
+outside NativePHP (`composer dev`, `php artisan serve`) arrives looking newer than every edit
+made since, so **the app renders a weeks old version of a view after a restart**, while it
+showed the edits fine before it. Editing the view again appears to fix it, until the next
+restart.
+
+`composer native:dev` therefore runs `php artisan view:clear` first, which empties the repo's
+compiled views so there's nothing stale to copy. If a view looks old anyway, compare the
+markup the dev server sends (`curl -s http://127.0.0.1:<port>/`) with the source, and delete
+`<userData>/storage/framework/views/*.php`. It's only a cache.
+
+Two more things look exactly like this and aren't:
+
+- **The installed app is running too.** A packaged build in `/Applications` puts the same
+  template icon in the menu bar, so the popup that opens may not be the dev one.
+- **The popup loaded before Vite was up.** The menubar page is created at boot and never
+  reloaded, so if it rendered before `public/hot` existed it keeps the stale `public/build`
+  assets for the whole session. `native:dev` waits for `public/hot` before it starts
+  `native:run` for this reason.
+
+## Tooltips are `data-tooltip`, never `title`
+
+Native `title` tooltips in the menubar window take over a second to appear and then show or
+don't at random. `resources/js/app.js` provides one tooltip for anything with a
+`data-tooltip` attribute instead: it shows after 250 ms, and instantly while moving between
+buttons.
+
+It's a single manual popover appended to `<body>`, outside the Livewire root, so a poll's
+morph never touches it, and the top layer keeps it above the open menu and out of reach of
+the list's `overflow` clipping. Its listeners are on the document for the same reason. A
+`MutationObserver` updates or hides it when a poll changes the text under the cursor or
+removes the element.
+
+Give new buttons a `data-tooltip`, and keep `aria-label` on icon-only ones, since the tooltip
+isn't exposed to assistive technology. A `title` beside it would show a second, native
+tooltip.
+
 ## ddev parity, and the one place we diverge
 
 Status text is reproduced exactly as `ddev list` prints it, including the `running` -> `OK`
