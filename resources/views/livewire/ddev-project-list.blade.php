@@ -66,7 +66,7 @@
                 wire:click="refreshProjects"
                 @disabled($busy)
                 class="cursor-pointer rounded-md p-1.5 text-zinc-500 transition-colors duration-150 hover:bg-zinc-500/10 hover:text-zinc-900 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none disabled:cursor-default disabled:opacity-40 dark:hover:text-zinc-100"
-                title="Refresh project list"
+                data-tooltip="Refresh project list"
                 aria-label="Refresh project list"
             >
                 <x-icon name="refresh" @class(['motion-safe:animate-spin' => $busy]) />
@@ -86,7 +86,7 @@
                     'bg-amber-500 text-white' => $this->confirmingPowerOff,
                     'text-zinc-500 hover:bg-amber-500/10 hover:text-amber-600 dark:hover:text-amber-400' => ! $this->confirmingPowerOff,
                 ])
-                title="Stop all projects (ddev poweroff)"
+                data-tooltip="Stop all projects (ddev poweroff)"
                 aria-label="Stop all projects"
             >
                 <x-icon name="power" />
@@ -100,7 +100,7 @@
                     'text-zinc-900 dark:text-zinc-100' => $this->showingSettings,
                     'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100' => ! $this->showingSettings,
                 ])
-                title="Settings"
+                data-tooltip="Settings"
                 aria-label="Settings"
                 aria-pressed="{{ $this->showingSettings ? 'true' : 'false' }}"
             >
@@ -126,6 +126,7 @@
                         type="button"
                         wire:click="powerOff"
                         class="cursor-pointer rounded bg-amber-600 px-2 py-1 font-medium text-white transition-colors duration-150 hover:bg-amber-700 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
+                        data-tooltip="Run ddev poweroff"
                     >
                         Stop all
                     </button>
@@ -134,6 +135,7 @@
                         type="button"
                         wire:click="cancelPowerOff"
                         class="cursor-pointer rounded px-2 py-1 font-medium text-zinc-600 transition-colors duration-150 hover:bg-zinc-500/10 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none dark:text-zinc-400"
+                        data-tooltip="Keep the projects running"
                     >
                         Cancel
                     </button>
@@ -175,7 +177,7 @@
                     type="button"
                     wire:click="hideSettings"
                     class="cursor-pointer rounded p-1 text-zinc-500 transition-colors duration-150 hover:bg-zinc-500/10 hover:text-zinc-900 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none dark:hover:text-zinc-100"
-                    title="Back to the project list"
+                    data-tooltip="Back to the project list"
                     aria-label="Back to the project list"
                 >
                     <x-icon name="arrow-left" class="size-4" />
@@ -205,6 +207,7 @@
                                 type="button"
                                 wire:click="forgetEditor"
                                 class="cursor-pointer text-xs font-medium text-zinc-500 hover:text-zinc-900 hover:underline dark:text-zinc-400 dark:hover:text-zinc-100"
+                                data-tooltip="Forget the chosen IDE"
                             >
                                 Reset
                             </button>
@@ -225,7 +228,7 @@
                                 aria-checked="{{ $selected ? 'true' : 'false' }}"
                                 wire:click="chooseEditor(@js($path))"
                                 @class([$editorClasses, 'bg-blue-500/10 text-blue-700 dark:text-blue-300' => $selected])
-                                title="{{ $path }}"
+                                data-tooltip="{{ $path }}"
                             >
                                 <x-icon name="code" @class(['size-3.5', 'text-zinc-400' => ! $selected]) />
                                 <span class="min-w-0 flex-1 truncate">{{ $name }}</span>
@@ -240,6 +243,7 @@
                             type="button"
                             wire:click="chooseOtherEditor"
                             class="{{ $editorClasses }} text-zinc-600 dark:text-zinc-400"
+                            data-tooltip="Choose another app in Finder"
                         >
                             <x-icon name="folder" class="size-3.5 text-zinc-400" />
                             Other app&hellip;
@@ -267,7 +271,7 @@
                     type="button"
                     wire:click="hideLogs"
                     class="cursor-pointer rounded p-1 text-zinc-500 transition-colors duration-150 hover:bg-zinc-500/10 hover:text-zinc-900 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none dark:hover:text-zinc-100"
-                    title="Back to the project list"
+                    data-tooltip="Back to the project list"
                     aria-label="Back to the project list"
                 >
                     <x-icon name="arrow-left" class="size-4" />
@@ -282,7 +286,7 @@
                     type="button"
                     wire:click="revealLogFile"
                     class="cursor-pointer rounded p-1 text-zinc-500 transition-colors duration-150 hover:bg-zinc-500/10 hover:text-zinc-900 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none dark:hover:text-zinc-100"
-                    title="Reveal the full ddev log, which holds every project and a week of them"
+                    data-tooltip="Reveal the full ddev log, which holds every project and a week of them"
                     aria-label="Reveal the ddev log file in Finder"
                 >
                     <x-icon name="folder" class="size-3.5" />
@@ -360,6 +364,7 @@
                 'bg-zinc-500/10 text-zinc-600 hover:bg-zinc-500/20 dark:text-zinc-400' => ! $this->runningOnly,
             ])
             aria-pressed="{{ $this->runningOnly ? 'true' : 'false' }}"
+            data-tooltip="{{ $this->runningOnly ? 'Show all projects' : 'Show only running projects' }}"
         >
             Running only
         </button>
@@ -400,6 +405,7 @@
                         type="button"
                         wire:click="clearFilters"
                         class="cursor-pointer text-xs font-medium text-blue-600 hover:underline dark:text-blue-400"
+                        data-tooltip="Clear the search and show all projects"
                     >
                         Clear filters
                     </button>
@@ -433,7 +439,7 @@
                             </span>
 
                             <div class="min-w-0 flex-1">
-                                <p class="truncate font-medium" title="{{ $project->shortRoot }}">{{ $project->name }}</p>
+                                <p class="truncate font-medium" data-tooltip="{{ $project->shortRoot }}">{{ $project->name }}</p>
 
                                 <div class="mt-0.5 flex items-center gap-1.5 text-xs">
                                     @if ($pending)
@@ -482,7 +488,7 @@
                                     popovertarget="{{ $menuId }}"
                                     style="anchor-name: {{ $menuAnchor }}"
                                     class="flex cursor-pointer items-center rounded p-1 text-zinc-500 transition-colors duration-150 hover:bg-zinc-500/10 hover:text-zinc-900 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none disabled:cursor-default disabled:opacity-30 dark:hover:text-zinc-100"
-                                    title="Open {{ $project->name }}"
+                                    data-tooltip="Open {{ $project->name }}"
                                     aria-label="Open {{ $project->name }}"
                                     aria-haspopup="menu"
                                 >
@@ -519,7 +525,7 @@
                                                 popovertargetaction="hide"
                                                 @disabled(! $servesSite)
                                                 class="{{ $menuItemClasses }}"
-                                                title="{{ $url }}"
+                                                data-tooltip="{{ $url }}"
                                             >
                                                 <x-icon name="external-link" class="size-3.5 text-zinc-400" />
                                                 {{ $host }}
@@ -536,7 +542,7 @@
                                             popovertargetaction="hide"
                                             @disabled(! $servesSite || blank($project->primaryUrl))
                                             class="{{ $menuItemClasses }}"
-                                            title="{{ $project->primaryUrl }}"
+                                            data-tooltip="{{ $project->primaryUrl }}"
                                         >
                                             <x-icon name="external-link" class="size-3.5 text-zinc-400" />
                                             Open site
@@ -558,7 +564,7 @@
                                         popovertargetaction="hide"
                                         @disabled(! $servesSite || blank($project->databaseUrl))
                                         class="{{ $menuItemClasses }}"
-                                        title="{{ blank($project->databaseUrl) ? 'The database container is not running' : 'Open the database in your database client' }}"
+                                        data-tooltip="{{ blank($project->databaseUrl) ? 'The database container is not running' : 'Open the database in your database client' }}"
                                     >
                                         <x-icon name="database" class="size-3.5 text-zinc-400" />
                                         Open database
@@ -572,7 +578,7 @@
                                         popovertargetaction="hide"
                                         @disabled(! $servesSite || blank($project->mailpitUrl))
                                         class="{{ $menuItemClasses }}"
-                                        title="{{ $project->mailpitUrl ?? 'Mailpit is not available' }}"
+                                        data-tooltip="{{ $project->mailpitUrl ?? 'Mailpit is not available' }}"
                                     >
                                         <x-icon name="mail" class="size-3.5 text-zinc-400" />
                                         Open mail
@@ -592,7 +598,7 @@
                                         popovertarget="{{ $menuId }}"
                                         popovertargetaction="hide"
                                         class="{{ $menuItemClasses }}"
-                                        title="{{ $project->shortRoot }}"
+                                        data-tooltip="{{ $project->shortRoot }}"
                                     >
                                         <x-icon name="code" class="size-3.5 text-zinc-400" />
                                         {{ $editorName === null ? 'Open in IDE…' : 'Open in '.$editorName }}
@@ -603,7 +609,7 @@
                                     type="button"
                                     wire:click="showLogs(@js($project->name))"
                                     class="cursor-pointer rounded p-1 text-zinc-500 transition-colors duration-150 hover:bg-zinc-500/10 hover:text-zinc-900 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none dark:hover:text-zinc-100"
-                                    title="Show what ddev printed for {{ $project->name }}"
+                                    data-tooltip="Show what ddev printed for {{ $project->name }}"
                                     aria-label="Show the ddev log for {{ $project->name }}"
                                 >
                                     <x-icon name="logs" class="size-3.5" />
@@ -614,7 +620,7 @@
                                     wire:click="revealInFinder(@js($project->name))"
                                     @disabled($pending)
                                     class="cursor-pointer rounded p-1 text-zinc-500 transition-colors duration-150 hover:bg-zinc-500/10 hover:text-zinc-900 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none disabled:cursor-default disabled:opacity-30 dark:hover:text-zinc-100"
-                                    title="Reveal {{ $project->shortRoot }} in Finder"
+                                    data-tooltip="Reveal {{ $project->shortRoot }} in Finder"
                                     aria-label="Reveal {{ $project->name }} in Finder"
                                 >
                                     <x-icon name="folder" class="size-3.5" />
@@ -626,7 +632,7 @@
                                         wire:click="runOperation(@js($project->name), 'stop')"
                                         @disabled($pending)
                                         class="cursor-pointer rounded p-1 text-zinc-500 transition-colors duration-150 hover:bg-zinc-500/10 hover:text-zinc-900 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none disabled:cursor-default disabled:opacity-30 dark:hover:text-zinc-100"
-                                        title="Stop {{ $project->name }}"
+                                        data-tooltip="Stop {{ $project->name }}"
                                         aria-label="Stop {{ $project->name }}"
                                     >
                                         <x-icon name="stop" class="size-3.5" />
@@ -639,7 +645,7 @@
                                         wire:click="runOperation(@js($project->name), 'restart')"
                                         @disabled($pending)
                                         class="cursor-pointer rounded p-1 text-zinc-500 transition-colors duration-150 hover:bg-zinc-500/10 hover:text-zinc-900 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none disabled:cursor-default disabled:opacity-30 dark:hover:text-zinc-100"
-                                        title="Restart {{ $project->name }}"
+                                        data-tooltip="Restart {{ $project->name }}"
                                         aria-label="Restart {{ $project->name }}"
                                     >
                                         <x-icon name="restart" class="size-3.5" />
@@ -652,7 +658,7 @@
                                         wire:click="runOperation(@js($project->name), 'start')"
                                         @disabled($pending)
                                         class="cursor-pointer rounded p-1 text-emerald-600 transition-colors duration-150 hover:bg-emerald-500/10 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none disabled:cursor-default disabled:opacity-30 dark:text-emerald-400"
-                                        title="Start {{ $project->name }}"
+                                        data-tooltip="Start {{ $project->name }}"
                                         aria-label="Start {{ $project->name }}"
                                     >
                                         <x-icon name="play" class="size-3.5" />
@@ -668,7 +674,7 @@
                                         'bg-red-600 text-white' => $confirming,
                                         'text-zinc-500 hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400' => ! $confirming,
                                     ])
-                                    title="Delete {{ $project->name }}"
+                                    data-tooltip="Delete {{ $project->name }}"
                                     aria-label="Delete {{ $project->name }}"
                                 >
                                     <x-icon name="trash" class="size-3.5" />
@@ -692,6 +698,7 @@
                                             type="button"
                                             wire:click="runOperation(@js($project->name), 'delete')"
                                             class="cursor-pointer rounded bg-red-600 px-2 py-1 font-medium text-white transition-colors duration-150 hover:bg-red-700 focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:outline-none"
+                                            data-tooltip="Run ddev delete for {{ $project->name }}"
                                         >
                                             Delete
                                         </button>
@@ -700,6 +707,7 @@
                                             type="button"
                                             wire:click="cancelDelete"
                                             class="cursor-pointer rounded px-2 py-1 font-medium text-zinc-600 transition-colors duration-150 hover:bg-zinc-500/10 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none dark:text-zinc-400"
+                                            data-tooltip="Keep {{ $project->name }}"
                                         >
                                             Cancel
                                         </button>
@@ -745,7 +753,7 @@
                 Working
             </span>
         @elseif ($snapshot !== null)
-            <span title="{{ $snapshot->refreshedAt->toDateTimeString() }}">
+            <span data-tooltip="{{ $snapshot->refreshedAt->toDateTimeString() }}">
                 Updated {{ $snapshot->refreshedAt->diffForHumans(short: true) }}
             </span>
         @endif

@@ -31,3 +31,43 @@ html {
 input {
     user-select: text;
 }
+
+/*
+ * The shared tooltip from resources/js/app.js. It is a popover, so the UA
+ * stylesheet's centring (`inset: 0; margin: auto`) and its border and padding
+ * are undone before top and left can place it.
+ */
+.tooltip {
+    position: fixed;
+    inset: auto;
+    margin: 0;
+    max-width: 260px;
+    padding: 3px 7px;
+    border: 0;
+    border-radius: var(--radius-md);
+    background: var(--color-zinc-800);
+    color: var(--color-white);
+    font-size: var(--text-xs);
+    line-height: var(--text-xs--line-height);
+    overflow-wrap: anywhere;
+    pointer-events: none;
+    box-shadow: var(--shadow-md);
+}
+
+@media (prefers-color-scheme: dark) {
+    .tooltip {
+        background: var(--color-zinc-600);
+    }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .tooltip:popover-open {
+        animation: tooltip-in 100ms ease-out;
+    }
+}
+
+@keyframes tooltip-in {
+    from {
+        opacity: 0;
+    }
+}
